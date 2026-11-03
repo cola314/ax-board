@@ -135,6 +135,7 @@ def main():
 
     group, first_at, last_at = [], 0.0, 0.0
     dm, dm_first, dm_last = [], 0.0, 0.0
+    down_since = 0.0
     while True:
         try:
             for it in api("/api/inbox/take")["items"]:
@@ -146,9 +147,14 @@ def main():
                     out.append({"source": "dashboard-cancel", "text": it["text"]})
                 else:
                     out.append({"source": "dashboard", "text": it["text"]})
-        except OSError:
-            print("SERVER_DOWN")
-            return 3
+            down_since = 0.0
+        except OSError:  # 서버가 잠깐 바쁘거나 재시작 중일 수 있어 30초 동안은 기다렸다 다시 본다
+            down_since = down_since or time.time()
+            if time.time() - down_since > 30:
+                print("SERVER_DOWN")
+                return 3
+            time.sleep(2)
+            continue
         log = teams_cache.latest_log() if teams else None
         sig = (log, os.path.getsize(log)) if log else None
         if sig and sig != last:
