@@ -31,6 +31,8 @@ DEFAULTS = {
              "default_project": ""},  # "#249 ..." 처럼 번호만 오면 이 프로젝트로. 비우면 묶지 않음
     # 대시보드 화면용(공개해도 되는 값만, GET /api/config). 빠진 값은 dashboard.html 기본값
     "dashboard": {},
+    # 대시보드 '📜 규칙' 보기가 읽을 운영 규칙 마크다운(ROOT 기준 상대 경로). 비우면 규칙 보기 없음
+    "rules": {"file": ""},
 }
 
 

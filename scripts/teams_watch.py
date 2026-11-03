@@ -56,13 +56,16 @@ def text_of(m):
     return re.sub(r"\s+", " ", html.unescape(s)).strip()
 
 
-def new_messages(path, seen, since):
+def new_messages(path, seen, since, mine=None):
+    """mine: {대화 id: 내가 마지막으로 보낸 시각} 을 채워 준다(내가 지금 대화 중인 방 판단용)."""
     found = {}
     for cv in conversations(path):
         m = cv["lastMessage"]
         mid = str(m.get("id") or m.get("clientmessageid"))
         if mid in seen or m.get("messagetype") not in CHAT_TYPES:
             continue
+        if from_me(cv) and mine is not None:
+            mine[str(cv.get("id", ""))] = str(m.get("originalarrivaltime", ""))
         if from_me(cv) or str(cv.get("id", "")).startswith("48:"):
             continue
         if str(m.get("originalarrivaltime", "")) <= since:

@@ -1,6 +1,6 @@
 """대시보드 '현황' 칸 데이터: 내 MR, push 안 한 로컬 브랜치, 진행 중 일, 다음 회의.
 
-wait.py 의 별도 스레드가 5분마다 collect() 를 불러 서버 /api/status 로 넘긴다. 칸마다 실패해도 나머지는 채운다.
+server.py 의 status_loop 스레드가 5분마다 collect() 를 불러 현황 칸을 채운다. 칸마다 실패해도 나머지는 채운다.
 """
 import os
 import re

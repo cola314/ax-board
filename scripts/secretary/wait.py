@@ -18,9 +18,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))  # teams_cache, teams_watch
 sys.path.insert(0, HERE)
 import config  # noqa: E402
-# 기능 모듈(teams_watch·mail_notify·gitlab_watch·calendar_watch·status)은 config features 에서 켜진 것만 main() 에서 import
+# 기능 모듈(teams_watch·mail_notify·gitlab_watch·calendar_watch)은 config features 에서 켜진 것만 main() 에서 import
 
-STATUS_EVERY = 300
 
 GITLAB_EVERY = 60
 GITLAB_MAIL = re.compile(r"^(Re: )?[\w./-]+ \| ")
@@ -28,6 +27,8 @@ GITLAB_MAIL = re.compile(r"^(Re: )?[\w./-]+ \| ")
 BASE = config.base()
 WAKE_NAMES = config.wake_names()
 GROUP_QUIET, GROUP_MAX = 30, 120  # 그룹방: 30초 조용하면, 아무리 길어도 2분이면 깨움
+DM_QUIET, DM_MAX = 10, 60
+TALKING = 600  # 내가 이 시간(초) 안에 답한 1:1 은 직접 대화 중으로 보고 깨우지 않음  # 1:1: 짧게 끊어 치는 걸 한 번에(10초 조용하면, 길어도 1분)
 STATE = config.state_file()
 
 
@@ -53,6 +54,17 @@ def api(path, body=None):
         return json.load(r)
 
 
+def talking(mine, at):
+    """내가 그 방에 마지막으로 보낸 시각(mine)이 이 메시지(at)보다 TALKING 초 안쪽이면 True."""
+    if not mine or not at:
+        return False
+    try:
+        f = lambda x: datetime.fromisoformat(str(x).replace("Z", "+00:00"))
+        return abs((f(at) - f(mine)).total_seconds()) <= TALKING
+    except ValueError:
+        return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--interval", type=float, default=0.5)
@@ -62,7 +74,7 @@ def main():
     if a.reply:
         api("/api/items", {"kind": "mina", "text": a.reply})
 
-    teams, gmail, gitlab, cal_on, status_on = (config.on(f) for f in ("teams", "gmail", "gitlab", "calendar", "status"))
+    teams, gmail, gitlab, cal_on = (config.on(f) for f in ("teams", "gmail", "gitlab", "calendar"))
     if teams:
         import teams_cache
         import teams_watch
@@ -72,8 +84,6 @@ def main():
         import gitlab_watch
     if cal_on:
         import calendar_watch
-    if status_on:
-        import status as status_board
 
     st = load_state()
     if "since" not in st:
@@ -98,22 +108,15 @@ def main():
     if gitlab:
         threading.Thread(target=gitlab_loop, daemon=True).start()
 
-    def status_loop():  # 현황 칸: 한 바퀴 1분쯤(GitLab·git) 걸려 따로 돈다
-        while True:
-            try:
-                api("/api/status", status_board.collect())
-            except Exception as e:
-                print("STATUS_SKIP", e, file=sys.stderr)
-            time.sleep(STATUS_EVERY)
-
-    if status_on:
-        threading.Thread(target=status_loop, daemon=True).start()
     group, first_at, last_at = [], 0.0, 0.0
+    dm, dm_first, dm_last = [], 0.0, 0.0
     while True:
         try:
             for it in api("/api/inbox/take")["items"]:
                 if it["kind"] == "session":  # 다른 세션의 보고: 데이터로만 다룬다
                     out.append({"source": "session", "from": it.get("from"), "text": it["text"]})
+                elif it["kind"] == "cancel":  # 사용자가 이미 넘어온 말을 취소함: 그 일은 멈추거나 하지 않는다
+                    out.append({"source": "dashboard-cancel", "text": it["text"]})
                 else:
                     out.append({"source": "dashboard", "text": it["text"]})
         except OSError:
@@ -123,14 +126,21 @@ def main():
         sig = (log, os.path.getsize(log)) if log else None
         if sig and sig != last:
             last = sig
-            msgs = teams_watch.new_messages(log, seen, st["since"])
+            msgs = teams_watch.new_messages(log, seen, st["since"], st.setdefault("my_last", {}))
             for m in msgs:
-                # 1:1·내 이름 언급은 바로, 그룹방은 대화가 잦아들 때 묶어서 깨운다
+                # 내 이름 언급은 바로, 1:1 은 10초 조용해지면, 그룹방은 대화가 잦아들 때 묶어서 깨운다
                 api("/api/items", {"kind": "teams", "from": m["from"], "chat": m["chat"], "text": m["text"]})
                 seen.add(m["id"])
                 st["seen"] = st.get("seen", []) + [m["id"]]
-                if m["conversation"].endswith("@unq.gbl.spaces") or any(n in m["text"] for n in WAKE_NAMES):
+                if any(n in m["text"] for n in WAKE_NAMES):
                     out.append(dict(m, source="teams"))
+                elif talking(st.get("my_last", {}).get(m["conversation"]), m["time"]):
+                    pass  # 내가 방금(10분 안) 답한 1:1 = 사용자가 직접 대화 중 → 소식판에만, 안 깨움
+                elif m["conversation"].endswith("@unq.gbl.spaces"):
+                    now = time.time()
+                    dm_first = dm_first if dm else now
+                    dm_last = now
+                    dm.append(dict(m, source="teams"))
                 else:
                     now = time.time()
                     first_at = first_at if group else now
@@ -187,6 +197,8 @@ def main():
                     out.append(dict(m, source="mail"))
             save_state(st)
         now = time.time()
+        if dm and (out or now - dm_last >= DM_QUIET or now - dm_first >= DM_MAX):
+            out, dm = dm + out, []
         if group and (out or now - last_at >= GROUP_QUIET or now - first_at >= GROUP_MAX):
             out, group = group + out, []
         if out:

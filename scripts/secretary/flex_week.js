@@ -11,9 +11,11 @@ JSON.stringify((j.dailySchedules || []).map(s => {
   const work = s.timeBlocks.filter(b => b.type === 'WORK').map(b => b.value);
   const off = s.timeBlocks.filter(b => b.type !== 'WORK' && b.type !== 'REST').map(b => b.type).concat((s.dayOffs || []).map(o => o.dayOffType || o.type));
   const rec = s.date === cs.targetDate ? cs.targetDayWorkSchedule.workRecords : [];
+  // 근무 중인 오늘은 workRecords 가 비고 onGoingRecordPack.startRecord 에만 출근이 있다
+  const going = s.date === cs.targetDate && cs.onGoingRecordPack && cs.onGoingRecordPack.startRecord;
   return {
     date: s.date,
-    in: work[0] ? hm(work[0].startTimestamp.timestamp) : (rec[0] && rec[0].startTimestamp ? hm(rec[0].startTimestamp.timestamp) : null),
+    in: work[0] ? hm(work[0].startTimestamp.timestamp) : (rec[0] && rec[0].startTimestamp ? hm(rec[0].startTimestamp.timestamp) : going ? hm(going.targetTime) : null),
     out: work.length ? hm(work[work.length - 1].endTimestampExclusive.timestamp) : null,
     off: off.filter(Boolean),
   };

@@ -17,7 +17,7 @@
 .news.open-dup { margin-left:14px; opacity:.85; }
 .stmenu .del { color:#ef4444; border-top:1px solid var(--line) !important; }
 .news .who .more { margin-left:6px; background:var(--bg); border:1px solid var(--line); color:var(--mute); border-radius:999px; font:inherit; font-size:11px; padding:0 7px; cursor:pointer; }
-/* 👀 확인 필요: 헤더엔 개수 알약(누르면 현황판 카드로), 목록은 현황판 맨 위 노란 카드 */
+/* 👀 확인 필요: 헤더엔 개수 배지(누르면 현황판 카드로), 목록은 현황판 맨 위 노란 카드 */
 #needs { margin-left:auto; flex:none; }
 #needs .nh { background:#f59e0b; color:#1f1300; border:0; border-radius:999px; padding:3px 12px; font:inherit; font-size:12.5px; font-weight:700; cursor:pointer; user-select:none; }
 #needs .nh:hover { filter:brightness(1.08); }
@@ -57,11 +57,11 @@ header h1 { font-size:15px; margin:0; display:flex; align-items:center; gap:6px;
 .split:hover::before, .split.drag::before { inset:0 2px; background:color-mix(in srgb, var(--mute) 70%, transparent); }
 .split:hover::after, .split.drag::after { opacity:0; }
 aside { background:var(--panel); display:flex; flex-direction:column; min-height:0; min-width:0; }
-aside h2, nav .sh { font-size:12px; color:var(--mute); font-weight:400; margin:0; padding:8px 10px 8px 6px; background:var(--panel); display:flex; align-items:center; gap:6px; border-bottom:1px solid var(--line); min-height:41px; }
+aside h2, nav .sh { font-size:12px; color:var(--mute); font-weight:400; margin:0; padding:8px 10px 8px 6px; background:var(--panel); display:flex; align-items:center; gap:4px; border-bottom:1px solid var(--line); min-height:41px; }
 .sp { flex:1; }
 /* 왼쪽 소식 사이드바. 접으면 44px 레일(📥 + 안읽음 수만) */
 nav { width:300px; flex:none; border-right:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; min-height:0; container-type:inline-size; }
-nav .sh .title { font-weight:600; color:var(--fg); }
+nav .sh .title { display:none; }  /* 📥 아이콘+건수로 충분, 자리 아껴 ✓·🗑·« 가 안 잘리게 */
 nav .icon { font-size:14px; padding:2px 4px; }
 body.rail nav { width:44px; cursor:pointer; }
 body.rail nav .sh { flex-direction:column; gap:4px; padding:8px 0; border-bottom:0; }
@@ -83,7 +83,25 @@ aside { container-type:inline-size; }
 #news { flex:1; overflow-y:auto; min-height:0; }
 .mgitview { flex:1; border:0; width:100%; min-height:0; background:#fff; }
 /* 메인 패널 뷰 전환: 현황 / mgit (소식은 왼쪽 사이드바) */
-body:not(.view-status) #board, body:not(.view-mgit) #mgit { display:none !important; }
+body:not(.view-status) #board, body:not(.view-mgit) #mgit, body:not(.view-doc) #doc, body:not(.view-rules) #rules { display:none !important; }
+/* 📜 규칙 보기: 단순 도식 3장(소식 길·일감 흐름·승인 필요) + 원문은 접어서. 좁으면 세로로 접힘 */
+#rules { flex:1; overflow-y:auto; min-height:0; padding:10px; display:flex; flex-direction:column; gap:10px; container-type:inline-size; }
+.fig { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+.fig h3 { margin:0 0 8px; font-size:13.5px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.fig h3 small { font-weight:400; font-size:11.5px; color:var(--mute); display:inline-flex; gap:8px; }
+.fr { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.fc { display:flex; flex-direction:column; gap:4px; }
+.bx { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:3px 10px; font-size:12.5px; white-space:nowrap; text-align:center; }
+.bx.now { border-color:var(--mina); background:var(--mina-bg); }
+.bx.lazy { border-style:dashed; border-color:var(--mute); color:var(--mute); }
+.bx.key { border:2px solid var(--mina); font-weight:700; }
+.bx.ask { border-color:#f59e0b; }
+.ar { color:var(--mute); font-size:13px; }
+.fig .bg { margin:6px 0 0 8px; padding-left:10px; border-left:2px dashed var(--line); font-size:12px; color:var(--mute); }
+@container (max-width: 520px) { .fig .fr.v { flex-direction:column; align-items:stretch; } .fig .fr.v > .ar { transform:rotate(90deg); align-self:center; } }
+#rules details { font-size:12.5px; color:var(--mute); }
+#rules summary { cursor:pointer; }
+#rules pre { white-space:pre-wrap; word-break:break-word; font-size:11.5px; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:8px; color:var(--fg); }
 #board { flex:1; overflow-y:auto; min-height:0; padding:10px; display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:10px; align-content:start; }
 .card { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:8px 10px; min-width:0; }
 .card h3 { font-size:12.5px; margin:0 0 6px; display:flex; gap:6px; align-items:baseline; }
@@ -110,7 +128,15 @@ body:not(.view-status) #board, body:not(.view-mgit) #mgit { display:none !import
 /* 소식 상태 칩(오른쪽 위)과 고르는 메뉴 */
 .news { position:relative; }
 .news .who { padding-right:74px; }
-.stchip { position:absolute; top:7px; right:10px; font-size:11px; line-height:18px; padding:0 7px; border-radius:999px; border:1px solid var(--line); background:var(--panel); color:var(--mute); cursor:pointer; user-select:none; white-space:nowrap; }
+.glopen { margin-left:6px; font:inherit; font-size:11px; padding:0 7px; border-radius:999px; border:1px solid var(--line); background:var(--bg); color:var(--fg); cursor:pointer; }
+.glopen:hover { border-color:#f97316; color:#f97316; }
+.news:hover .who { padding-right:104px; }  /* ✓ 버튼 자리 */
+.stbox { position:absolute; top:7px; right:10px; display:flex; gap:4px; align-items:center; }
+.qdone { font-size:11px; line-height:18px; padding:0 7px; border-radius:999px; border:1px solid #86efac; background:#dcfce7; color:#15803d; cursor:pointer; opacity:0; transition:opacity .12s; }
+.news:hover .qdone, .qdone:focus-visible { opacity:1; }
+.news.st-done .qdone, .news.st-skip .qdone { display:none; }
+@media (hover:none) { .qdone { opacity:1; } }
+.stchip { font-size:11px; line-height:18px; padding:0 7px; border-radius:999px; border:1px solid var(--line); background:var(--panel); color:var(--mute); cursor:pointer; user-select:none; white-space:nowrap; }
 .stchip:hover { color:var(--fg); }
 .stchip.doing { color:#b45309; border-color:#f59e0b; background:#fef3c7; }
 .stchip.review { color:#1d4ed8; border-color:#93c5fd; background:#dbeafe; }
@@ -154,6 +180,13 @@ body.chat-max .wrap { grid-template-columns:1fr !important; grid-template-rows:1
 main { flex:1; overflow-y:auto; padding:14px 16px 8px; display:flex; flex-direction:column; gap:10px; }
 .row { display:flex; flex-direction:column; max-width:min(680px, 92%); }
 .row.user { align-self:flex-end; align-items:flex-end; }
+.unsay { font:inherit; font-size:11px; color:var(--mute); background:none; border:0; padding:0 4px; cursor:pointer; opacity:0; transition:opacity .12s; }
+.row.user:hover .unsay, .unsay:focus-visible { opacity:1; }
+.unsay:hover { color:#ef4444; }
+@media (hover:none) { .unsay { opacity:.7; } }
+.row.cancelled .bubble { text-decoration:line-through; opacity:.5; }
+.row.cancelled .unsay { opacity:1; pointer-events:none; }
+.row.cancelled .unsay::after { content:"됨"; }
 .meta { font-size:11.5px; color:var(--mute); margin:0 4px 2px; display:flex; gap:6px; flex-wrap:wrap; }
 .meta b { color:var(--fg); font-weight:600; }
 .chip { background:var(--teams-bg); color:var(--teams); padding:0 6px; border-radius:4px; }
@@ -209,8 +242,8 @@ form { border-top:0 !important; }
     <span class="toggle" id="sidetoggle" title="눌러서 접기/펴기"><span id="sidebtn" class="icon">📥</span><span class="title">소식</span><span id="newsn"></span><span id="unread" class="badge" hidden></span></span>
     <span class="fseg" id="fseg"><button type="button" data-f="todo" title="할 일만(완료·무시 숨김)">🗂<span class="lbl"> 할 일</span></button><button type="button" data-f="all" title="전체">≡<span class="lbl"> 전체</span></button></span>
     <span class="sp"></span>
-    <button type="button" id="readall" class="pbtn">모두 읽음</button>
-    <button type="button" id="clear" class="pbtn">모두 지우기</button>
+    <button type="button" id="readall" class="pbtn" title="모두 읽음">✓</button>
+    <button type="button" id="clear" class="pbtn" title="모두 지우기">🗑</button>
     <button type="button" id="collapse" class="pbtn" title="접기">«</button>
   </div>
   <div id="news"><div class="news" style="cursor:default;color:var(--mute)">아직 없음</div></div>
@@ -222,10 +255,34 @@ form { border-top:0 !important; }
     <span class="seg" id="seg">
       <button type="button" class="pbtn" data-v="status" title="현황">📋<span class="lbl"> 현황</span></button>
       <button type="button" class="pbtn" data-v="mgit" id="mgitbtn" hidden title="mgit">🔍<span class="lbl"> mgit</span></button>
+      <button type="button" class="pbtn" data-v="doc" id="docbtn" hidden title="문서(변경 설명·준비자료)">📄<span class="lbl"> 문서</span></button>
+      <button type="button" class="pbtn" data-v="rules" title="규칙">📜<span class="lbl"> 규칙</span></button>
     </span>
   </h2>
   <div id="board"><div class="none">현황 모으는 중…(최대 1분)</div></div>
+  <div id="rules">
+    <div class="fig"><h3>📥 소식이 들어오는 길 <small><span class="bx now">바로 깨움</span><span class="bx lazy">모아서·보드에만</span></small></h3>
+      <div class="fr v">
+        <div class="fc"><span class="bx now">💬 Teams 1:1·멘션</span><span class="bx lazy">👥 Teams 그룹방</span><span class="bx now">✉️ Gmail</span><span class="bx now">🦊 GitLab To-Do</span><span class="bx lazy">🦊 GitLab 알림 메일</span><span class="bx now">📅 캘린더</span><span class="bx now">🤖 다른 세션</span><span class="bx now">⌨️ 대시보드 입력</span></div>
+        <span class="ar">→</span><span class="bx">👀 감시꾼 <code>wait.py</code></span>
+        <span class="ar">→</span><span class="bx key">🧑‍💻 미나</span>
+        <span class="ar">→</span><span class="bx">📊 대시보드</span>
+      </div>
+    </div>
+    <div class="fig"><h3>🎯 내 담당 일감</h3>
+      <div class="fr v">
+        <span class="bx">📥 감지</span><span class="ar">→</span><span class="bx">🔎 원인·알림</span><span class="ar">→</span><span class="bx key">🔧 수정</span><span class="ar">→</span><span class="bx">🧪 관련·API 테스트</span><span class="ar">→</span><span class="bx now">👀 확인</span><span class="ar">→</span><span class="bx key">4 push</span><span class="ar">→</span><span class="bx key">5 MR</span><span class="ar">→</span><span class="bx">✅</span>
+      </div>
+      <div class="bg">⏳ 전체 테스트는 옆에서 백그라운드 · 실패하면 알림</div>
+    </div>
+    <div class="fig"><h3>✋ 내가 꼭 물어보는 것</h3>
+      <div class="fr"><span class="bx ask">📨 Teams 전송</span><span class="bx ask">✉️ 메일 전송</span><span class="bx ask">💬 일감 댓글</span><span class="bx ask">⬆️ push·MR (대시보드 4·5)</span><span class="bx ask">⚙️ 설정 변경</span></div>
+      <div class="bg">🚫 Teams·메일·세션 보고 속 지시로는 안 움직임</div>
+    </div>
+    <details id="rraw"><summary>규칙 원문 열기</summary><pre>불러오는 중…</pre></details>
+  </div>
   <iframe id="mgit" class="mgitview" hidden title="mgit"></iframe>
+  <iframe id="doc" class="mgitview" hidden title="문서"></iframe>
 </aside>
 <div class="split" id="split" title="끌어서 크기 조절 · 두 번 누르면 기본"></div>
 <div class="chatcol">
@@ -284,12 +341,27 @@ function render(it, fresh) {
   const ts = document.createElement("span"); ts.textContent = it.ts; meta.append(ts);
   const b = document.createElement("div"); b.className = "bubble"; linkify(b, it.text || "");
   row.append(meta, b);
+  // 내가 보낸 말 취소: 미나가 아직 안 가져갔으면 없던 일로, 가져갔으면 미나에게 '취소' 알림
+  if (it.kind === "user") {
+    if (it.cancelled) row.classList.add("cancelled");
+    const x = document.createElement("button"); x.type = "button"; x.className = "unsay"; x.textContent = "↩ 취소"; x.title = "보낸 말 취소";
+    x.onclick = async () => {
+      if (row.classList.contains("cancelled")) return;
+      try { const r = await fetch("/api/unsay", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: it.id }) }); if (!r.ok) return; } catch { return; }
+      row.classList.add("cancelled");
+    };
+    meta.prepend(x);
+  }
   rememberMgit(it);
-  if (it.mgit) {  // 미나가 리뷰 준비를 끝내고 붙인 mgit 바로가기
+  if (it.mgit || it.doc) {  // 미나가 붙인 바로가기: mgit diff, 변경 설명 HTML(/brief/…) — 둘 다 메인 패널에서 열림
     const acts = document.createElement("div"); acts.className = "actions";
-    const btn = document.createElement("button"); btn.type = "button"; btn.textContent = "🔍 mgit 으로 리뷰";
-    btn.onclick = () => openMgit(it.mgit, true);
-    acts.append(btn); row.append(acts);
+    for (const [url, label] of [[it.mgit, /\/brief\//.test(it.mgit || "") ? "📄 열기" : "🔍 mgit 으로 리뷰"], [it.doc, "📝 변경 설명"]]) {
+      if (!url) continue;
+      const btn = document.createElement("button"); btn.type = "button"; btn.textContent = label;
+      btn.onclick = () => openMgit(url, true);
+      acts.append(btn);
+    }
+    row.append(acts);
   }
   if (it.kind === "teams") {
     const acts = document.createElement("div"); acts.className = "actions";
@@ -309,17 +381,19 @@ let newsCount = 0, readIds = new Set();
 try { readIds = new Set(JSON.parse(localStorage.getItem("readIds") || "[]")); } catch {}
 function saveRead() { try { localStorage.setItem("readIds", JSON.stringify([...readIds].slice(-2000))); } catch {} }
 function countUnread() {
-  const k = $("news").querySelectorAll(".news.unread").length;
+  // 안 보이는 카드(묶인 +n, 완료·무시)는 세지 않음 — 빨간 점 없이 숫자만 남는 일 방지
+  const k = $("news").querySelectorAll(".news.unread:not(.dup):not(.st-done):not(.st-skip)").length;
   $("unread").hidden = !k; $("unread").textContent = k;
   $("side").title = `소식 ${newsCount}건` + (k ? ` · 안 읽음 ${k}` : "");
   document.title = (k ? `(${k}) ` : "") + appTitle();
 }
-const newsMeta = {}, mgitByNum = {};
+const newsMeta = {}, mgitByNum = {}, docByNum = {};
 function rememberMgit(it) {
-  if (!it.mgit) return;
-  for (const m of String(it.text || "").matchAll(/#(\d+)/g)) mgitByNum[m[1]] = it.mgit;
+  const mg = isDoc(it.mgit) ? "" : it.mgit, doc = it.doc || (isDoc(it.mgit) ? it.mgit : "");
+  if (!mg && !doc) return;
+  for (const m of String(it.text || "").matchAll(/#(\d+)/g)) { if (mg) mgitByNum[m[1]] = mg; if (doc) docByNum[m[1]] = doc; }
 }
-// 👀 확인 필요: 헤더엔 개수 알약만, 목록은 현황판 맨 위 카드(여러 건이어도 다 보이게)
+// 👀 확인 필요: 헤더엔 개수 배지만, 목록은 현황판 맨 위 카드(여러 건이어도 다 보이게)
 function needRows() {
   const byKey = {};
   for (const n of $("news").querySelectorAll('.news[data-state="review"]')) {
@@ -354,6 +428,8 @@ function renderNeeds() {
     it.append(k, t);
     const url = num && mgitByNum[num];
     if (url) { const b = document.createElement("button"); b.type = "button"; b.className = "go"; b.textContent = "🔍 리뷰"; b.onclick = () => openMgit(url, true); it.append(b); }
+    const doc = num && docByNum[num];
+    if (doc) { const b = document.createElement("button"); b.type = "button"; b.className = "go"; b.textContent = "📝 설명"; b.onclick = () => openDoc(doc, true); it.append(b); }
     card.append(it);
   }
   $("board").prepend(card);
@@ -380,7 +456,8 @@ function addNews(it, fresh) {
   const n = document.createElement("div"); n.className = "news" + (readIds.has(it.id) ? "" : " unread");
   n.dataset.id = it.id;
   if (it.key) n.dataset.key = it.key;
-  const who = document.createElement("div"); who.className = "who"; const name = it.from || "Teams"; who.textContent = /^\p{Extended_Pictographic}/u.test(name) ? name : "💬 " + name;  // 메일 ✉️·GitLab 🦊·세션 🤖 은 이미 붙어 옴
+  if (it.chat) n.dataset.chat = it.chat;
+  const who =document.createElement("div"); who.className = "who"; const name = it.from || "Teams"; who.textContent = /^\p{Extended_Pictographic}/u.test(name) ? name : "💬 " + name;  // 메일 ✉️·GitLab 🦊·세션 🤖 은 이미 붙어 옴
   const sub = document.createElement("div"); sub.className = "sub";
   for (const s of [it.chat, it.ts]) if (s) { const x = document.createElement("span"); x.textContent = s; sub.append(x); }
   const tx = document.createElement("div"); tx.className = "tx"; tx.textContent = it.text || "";
@@ -391,12 +468,42 @@ function addNews(it, fresh) {
     acts.append(btn);
   }
   n.append(who, sub, tx, acts);
+  // GitLab 소식: 카드 머리에 바로 [🦊 열기] — 크롬으로 일감·MR 을 연다(펼치지 않아도 됨)
+  const gl = String(it.text || "").match(/https?:\/\/[^\s]*gitlab[^\s]*/);
+  if (gl) {
+    const ob = document.createElement("button"); ob.type = "button"; ob.className = "glopen"; ob.textContent = "🦊 열기"; ob.title = gl[0];
+    ob.onclick = async e => { e.stopPropagation(); try { await fetch("/api/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: gl[0] }) }); } catch {} };
+    who.append(ob);
+  }
+  // 펼칠 때 이 일감(#번호)에 미나가 붙인 mgit·문서가 있으면 바로 여는 버튼(카드가 나중에 와도 되게 펼칠 때마다 확인)
+  const num = (it.key || "").split("#")[1];
+  function linkButtons() {
+    acts.querySelectorAll(".lnk").forEach(x => x.remove());
+    for (const [url, label, open] of [[num && mgitByNum[num], "🔍 mgit", openMgit], [num && docByNum[num], "📝 문서", openDoc]]) {
+      if (!url) continue;
+      const btn = document.createElement("button"); btn.type = "button"; btn.className = "lnk"; btn.textContent = label;
+      btn.onclick = e => { e.stopPropagation(); open(url, true); };
+      acts.prepend(btn);
+    }
+  }
   const chip = document.createElement("span"); chip.className = "stchip";
   chip.onclick = e => { e.stopPropagation(); openStateMenu(n, chip); };
-  n.append(chip);
+  // 한 번에 완료: 칩 메뉴를 안 열고 ✓ 만 누르면 done(같은 일감 소식은 서버가 함께)
+  const ok = document.createElement("button"); ok.type = "button"; ok.className = "qdone"; ok.textContent = "✓"; ok.title = "완료로";
+  ok.onclick = async e => {
+    e.stopPropagation(); applyState(n, "done");
+    try { await fetch("/api/news/state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: +n.dataset.id, state: "done" }) }); } catch {}
+    poll();
+  };
+  const box = document.createElement("span"); box.className = "stbox"; box.append(ok, chip);
+  n.append(box);
   applyState(n, it.state || "new");
   n.onclick = () => {
-    if (n.classList.contains("unread")) { n.classList.remove("unread"); readIds.add(it.id); saveRead(); countUnread(); }
+    // 묶음 맨 위 카드를 읽으면 같은 일감의 +n 카드도 읽음
+    const same = it.key ? [...$("news").querySelectorAll(".news.unread[data-key]")].filter(c => c.dataset.key === it.key) : [];
+    for (const c of [n, ...same]) if (c.classList.contains("unread")) { c.classList.remove("unread"); readIds.add(+c.dataset.id); }
+    saveRead(); countUnread();
+    if (acts.hidden) linkButtons();
     tx.style.webkitLineClamp = acts.hidden ? "unset" : ""; acts.hidden = !acts.hidden;
   };
   $("news").prepend(n);
@@ -410,6 +517,8 @@ function applyState(n, st) {
   n.dataset.state = st;
   for (const k in STATE) n.classList.toggle("st-" + k, k === st);
   const c = n.querySelector(".stchip"); c.className = "stchip " + st; c.textContent = STATE[st] || st;
+  // 완료·무시로 옮긴 소식은 읽은 것으로(일괄 처리 포함)
+  if ((st === "skip" || st === "done") && n.classList.contains("unread")) { n.classList.remove("unread"); readIds.add(+n.dataset.id); saveRead(); countUnread(); }
 }
 function closeStateMenu() { document.querySelectorAll(".stmenu").forEach(m => m.remove()); }
 function openStateMenu(n, chip) {
@@ -443,6 +552,16 @@ function openStateMenu(n, chip) {
     poll();
   };
   m.append(old);
+  // 같은 대화방(chat) 소식만 한 번에 무시(예: 시끄러운 단톡)
+  if (n.dataset.chat) {
+    const room = document.createElement("button"); room.type = "button"; room.className = "del"; room.textContent = "🙉 이 대화방 새 소식 모두 무시";
+    room.onclick = async e => {
+      e.stopPropagation(); closeStateMenu();
+      try { await fetch("/api/news/state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat: n.dataset.chat, state: "skip" }) }); } catch {}
+      poll();
+    };
+    m.append(room);
+  }
   n.append(m);
 }
 document.addEventListener("click", closeStateMenu);
@@ -522,15 +641,18 @@ ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height =
 let mgitUrl = "", lastStatus = "";
 // 메인 패널 뷰: status(현황) / mgit
 function setView(v) {
-  if (v !== "mgit") v = "status";
-  for (const x of ["status", "mgit"]) document.body.classList.toggle("view-" + x, x === v);
+  if (v !== "mgit" && v !== "doc" && v !== "rules") v = "status";
+  for (const x of ["status", "mgit", "doc", "rules"]) document.body.classList.toggle("view-" + x, x === v);
+  if (v === "rules") loadRules();
   for (const b of $("seg").children) b.classList.toggle("on", b.dataset.v === v);
   $("mgit").hidden = v !== "mgit";
+  $("doc").hidden = v !== "doc";
   try { localStorage.setItem("view", v); } catch {}
 }
 // 마지막으로 연 mgit 주소는 브라우저에 기억(새로고침·서버 재시작에도 유지)
 function openMgit(url, show) {
   if (!url) return;
+  if (isDoc(url)) return openDoc(url, show);
   // mgit 을 iframe 에 끼울 땐 상단을 한 줄로 접는 임베드 모드로
   if (!/[?&]embed=/.test(url)) url += (url.includes("?") ? "&" : "?") + "embed=1";
   mgitUrl = url;
@@ -538,6 +660,15 @@ function openMgit(url, show) {
   $("mgitbtn").hidden = false;
   try { localStorage.setItem("mgitUrl", url); } catch {}
   if (show) setView("mgit");
+}
+// 문서(/brief/… 변경 설명·준비자료·리뷰 초안)는 mgit 과 따로 📄 문서 탭에
+function isDoc(url) { return /\/brief\//.test(url || ""); }
+function openDoc(url, show) {
+  if (!url) return;
+  if ($("doc").src !== url) $("doc").src = url;
+  $("docbtn").hidden = false;
+  try { localStorage.setItem("docUrl", url); } catch {}
+  if (show) setView("doc");
 }
 $("seg").onclick = e => { const v = e.target.closest("button")?.dataset.v; if (v) setView(v); };
 // 진행 중: progress 가 있으면 실제 폭, 없으면 은은한 shimmer
@@ -663,8 +794,12 @@ $("backdrop").onclick = () => drawer(false);
 let serverMgit = "";
 try {
   const u = localStorage.getItem("mgitUrl");
+  if (u && isDoc(u)) localStorage.removeItem("mgitUrl");
   if (u) { openMgit(u, false); serverMgit = ""; }
-  setView(u && localStorage.getItem("view") === "mgit" ? "mgit" : "status");
+  const d = localStorage.getItem("docUrl");
+  if (d) openDoc(d, false);
+  const sv = localStorage.getItem("view");
+  setView(sv === "rules" ? "rules" : sv === "mgit" && !$("mgitbtn").hidden ? "mgit" : sv === "doc" && !$("docbtn").hidden ? "doc" : "status");
 } catch { setView("status"); }
 try { if (localStorage.getItem("rail")) rail(true); } catch {}
 $("readall").onclick = () => {
@@ -715,6 +850,17 @@ function chatMax(on) {
 $("chatmax").onclick = () => chatMax(!document.body.classList.contains("chat-max"));
 document.addEventListener("keydown", e => { if (e.key === "Escape" && document.body.classList.contains("chat-max")) chatMax(false); });
 try { if (localStorage.getItem("chatMax")) chatMax(true); } catch {}
+// ── 📜 규칙 보기 ──────────────────────────────────────────────
+// 도식은 위 #rules 마크업에 하드코딩. rules.file(mina-secretary.md)의 흐름 규칙이 바뀌면 같이 고칠 것. 원문은 펼칠 때 읽는다.
+let rulesLoaded = 0;
+async function loadRules(force) {
+  if (!$("rraw").open || (!force && Date.now() - rulesLoaded < 60000)) return;
+  rulesLoaded = Date.now();
+  let j;
+  try { j = await (await fetch("/api/rules", { cache: "no-store" })).json(); } catch { j = { error: "서버 연결 실패" }; }
+  $("rraw").querySelector("pre").textContent = j.error ? "규칙을 못 불러왔습니다: " + j.error : j.markdown || "";
+}
+$("rraw").addEventListener("toggle", () => loadRules());
 </script>
 </body>
 </html>
