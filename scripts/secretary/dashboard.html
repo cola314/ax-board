@@ -1008,12 +1008,12 @@ function renderAtt(a) {
   const parts = [];
   if (a.stale) parts.push(["⚠ 출퇴근 기록 갱신 필요(" + (a.fetched || "없음") + " 기준)", "warn"]);
   const todayRow = (a.rows || []).find(r => r.kind === "today");
-  if (a.in) parts.push(a.out ? `오늘 ${a.in}~${a.out}` : `오늘 ${a.in} 출근`);
-  else if (todayRow) parts.push(["오늘 출근 기록 없음", "warn"]);
-  parts.push(`이번 주 ${dur(a.done)} / ${a.week_hours}h`);
+  // 한 줄은 짧게(출근·누적·퇴근만). 남은 시간·하루 몫은 펼쳤을 때
+  if (a.in) parts.push(a.out ? `${a.in}~${a.out}` : `${a.in} 출근`);
+  else if (todayRow) parts.push(["출근 기록 없음", "warn"]);
+  parts.push(`${dur(a.done)}/${a.week_hours}h`);
   if (!a.left) parts.push("목표 채움");
-  else parts.push(`남은 ${dur(a.left)}` + (a.per_day != null ? `(${a.days_left}일, 하루 약 ${dur(a.per_day)})` : "(남은 근무일 없음)"));
-  if (a.leave) parts.push(a.leave_late ? ["추천 퇴근 22시 넘음 — 하루로 못 채움", "warn"] : `추천 퇴근 ${a.leave}`);
+  else if (a.leave) parts.push(a.leave_late ? ["22시 넘어야 채움", "warn"] : `퇴근 ${a.leave}`);
   const line = el("div", "line"), t = el("span", "t");
   t.append("🕘 ");
   parts.forEach((p, i) => { if (i) t.append(" · "); Array.isArray(p) ? t.append(el("span", p[1], p[0])) : t.append(p); });
@@ -1025,6 +1025,7 @@ function renderAtt(a) {
   c.append(line);
   if (attOpen) {
     c.append(meter);
+    if (a.left) c.append(el("div", "n", `남은 ${dur(a.left)}` + (a.per_day != null ? ` · ${a.days_left}일, 하루 약 ${dur(a.per_day)}` : " · 남은 근무일 없음")));
     const tb = el("table"), hd = el("tr");
     for (const h of ["요일", "날짜", "출근", "퇴근", "근무", ""]) hd.append(el("th", null, h));
     tb.append(hd);
