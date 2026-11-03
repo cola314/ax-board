@@ -766,9 +766,18 @@ function whenText(w) {  // "11/03(Tue) 10:15" → "내일 10:15"
   const diff = Math.round((d - t) / 864e5);
   return (diff === 0 ? "오늘" : diff === 1 ? "내일" : `${m[1]}/${m[2]}(${DOW[d.getDay()]})`) + " " + m[3];
 }
-function renderBoard(st) {
-  const b = $("board"); b.innerHTML = "";
-  b.append(card("🦊 내 MR", st.mrs, (it, m) => {
+// 내 MR 칸: 기본 접힘. 지난번 펼쳐 본 뒤 승인 수·파이프라인·머지 상태가 바뀐 MR 수만 빨간 원으로(새로 올린 MR 은 변화로 안 셈)
+let mrOpen = false, mrSeen = {};
+try { mrSeen = JSON.parse(localStorage.getItem("mrSeen") || "{}"); } catch {}
+const mrSig = m => [m.approvals, m.pipeline, m.merge_status, m.mergeable].join("|");
+function mrCard(sec) {
+  const items = (sec && sec.items) || [];
+  if (!Object.keys(mrSeen).length) items.forEach(m => mrSeen[m.ref] = mrSig(m));  // 처음엔 지금 상태를 기준으로
+  items.forEach(m => { if (!(m.ref in mrSeen)) mrSeen[m.ref] = mrSig(m); });
+  try { localStorage.setItem("mrSeen", JSON.stringify(mrSeen)); } catch {}
+  const changed = new Set(items.filter(m => mrSeen[m.ref] !== mrSig(m)).map(m => m.ref));
+  const c = card("🦊 내 MR", sec, (it, m) => {
+    if (changed.has(m.ref)) it.append(el("span", "badge", "●"));
     it.append(el("span", "k", "!" + m.ref.replace(/^.*!/, "")), titleCell(m.title.replace(/^\S+ (fix|feat|refactor|chore): /, ""), m.url));
     const r = el("span", "r");
     const [ap, need] = String(m.approvals || "0/0").split("/");
@@ -777,7 +786,23 @@ function renderBoard(st) {
     const ms = m.mergeable ? MERGE.can_be_merged : (MERGE[m.merge_status] || [m.merge_status || "대기", ""]);
     if (ms[0] !== "승인 대기") r.append(chip(ms[0], ms[1]));
     it.append(r);
-  }));
+  });
+  const h = c.querySelector("h3"); h.style.cursor = "pointer";
+  h.prepend(mrOpen ? "▾ " : "▸ ");
+  if (changed.size) h.append(el("span", "badge", String(changed.size)));
+  [...c.children].forEach(x => { if (x !== h && !mrOpen) x.hidden = true; });
+  h.onclick = () => {
+    mrOpen = !mrOpen;
+    if (!mrOpen) { items.forEach(m => mrSeen[m.ref] = mrSig(m)); try { localStorage.setItem("mrSeen", JSON.stringify(mrSeen)); } catch {} }  // 펼쳐 보고 접으면 본 것으로
+    renderBoard(lastBoard); lastNeeds = ""; renderNeeds(); renderTaskCard();
+  };
+  return c;
+}
+let lastBoard = {};
+function renderBoard(st) {
+  lastBoard = st;
+  const b = $("board"); b.innerHTML = "";
+  b.append(mrCard(st.mrs));
   b.append(card("🔥 진행 중", st.todo, (it, t) => it.append(titleCell(String(t).split(" — ")[0]))));
   b.append(card("📅 다음 회의", st.meetings, (it, e) => {
     it.append(el("span", "k", whenText(e.when)), titleCell(strip(e.title, UI.meeting_strip)));
