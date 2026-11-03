@@ -138,7 +138,6 @@ body:not(.view-status) #board, body:not(.view-mgit) #mgit, body:not(.view-doc) #
 .news .who { padding-right:74px; }
 .glopen { margin-left:6px; font:inherit; font-size:11px; padding:0 7px; border-radius:999px; border:1px solid var(--line); background:var(--bg); color:var(--fg); cursor:pointer; }
 .glopen:hover { border-color:#f97316; color:#f97316; }
-.news:hover .who { padding-right:104px; }  /* ✓ 버튼 자리 */
 .stbox { position:absolute; top:7px; right:10px; display:flex; gap:4px; align-items:center; }
 .qdone { font-size:11px; line-height:18px; padding:0 7px; border-radius:999px; border:1px solid #86efac; background:#dcfce7; color:#15803d; cursor:pointer; opacity:0; transition:opacity .12s; }
 .news:hover .qdone, .qdone:focus-visible { opacity:1; }
@@ -242,6 +241,28 @@ form button:disabled { opacity:.5; cursor:default; }
 .quick button b { color:var(--mute); font-weight:600; margin-right:4px; }
 .quick button:hover { border-color:var(--mina); }
 form { border-top:0 !important; }
+/* 📌 고정: 말풍선·소식 카드에 마우스를 올리면 📌, 누르면 메인 패널 탭 바로 아래 '고정' 띠에 붙는다(애니메이션 없음) */
+.pinbtn { font:inherit; font-size:11px; line-height:18px; padding:0 6px; border-radius:999px; border:1px solid var(--line); background:var(--panel); color:var(--mute); cursor:pointer; opacity:0; user-select:none; }
+.row:hover .pinbtn, .news:hover .pinbtn, .pinbtn:focus-visible, .pinbtn.on { opacity:1; }
+.pinbtn:hover { color:var(--fg); }
+.pinbtn.on { border-color:var(--mina); background:var(--mina-bg); color:var(--fg); }
+@media (hover:none) { .pinbtn { opacity:.7; } }
+.news:hover .who { padding-right:132px; }  /* 📌·✓ 버튼 자리 */
+#pins { flex:none; max-height:60%; overflow-y:auto; padding:8px 10px 0; display:flex; flex-direction:column; gap:6px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+.pin { background:var(--bg); border:1px solid var(--line); border-left:3px solid var(--mina); border-radius:8px; min-width:0; }
+.pin .ph { display:flex; align-items:center; gap:6px; padding:4px 8px; font-size:12px; flex-wrap:wrap; min-width:0; }
+.pin .pt { flex:1 1 160px; min-width:0; display:flex; gap:6px; align-items:baseline; cursor:pointer; user-select:none; overflow:hidden; white-space:nowrap; }
+.pin .pt b { font-weight:600; overflow:hidden; text-overflow:ellipsis; }
+.pin .pt span { color:var(--mute); font-size:11.5px; overflow:hidden; text-overflow:ellipsis; }
+.pin .pb { display:flex; gap:4px; flex-wrap:wrap; }
+.pin .pb button, .pin .pa button { background:var(--panel); border:1px solid var(--line); color:var(--fg); border-radius:999px; padding:0 9px; font:inherit; font-size:11.5px; line-height:20px; cursor:pointer; white-space:nowrap; user-select:none; }
+.pin .pb button:hover, .pin .pa button:hover { border-color:var(--mina); }
+.pin .pb .unpin:hover { border-color:#ef4444; color:#ef4444; }
+.pin .px { padding:0 10px 8px; max-height:40vh; overflow-y:auto; }
+.pin .tx2 { white-space:pre-wrap; word-break:break-word; font-size:13px; }
+.pin .tx2 a { color:var(--teams); }
+.pin .pa { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+.pin.fold .px { display:none; }
 .hint { font-size:11px; color:var(--mute); padding:0 16px 8px; background:var(--panel); }
 </style>
 </head>
@@ -274,6 +295,7 @@ form { border-top:0 !important; }
       <button type="button" class="pbtn" data-v="rules" title="규칙">📜<span class="lbl"> 규칙</span></button>
     </span>
   </h2>
+  <div id="pins" hidden></div>
   <div id="board"><div class="none">현황 모으는 중…(최대 1분)</div></div>
   <div id="rules">
     <div class="fig"><h3>📥 소식이 들어오는 길 <small><span class="bx now">바로 깨움</span><span class="bx lazy">모아서·보드에만</span></small></h3>
@@ -354,6 +376,7 @@ function linkify(el, text) {
   el.append(text.slice(i));
 }
 function render(it, fresh) {
+  itemsById[it.id] = it;
   if (it.kind === "teams") return addNews(it, fresh);
   if (it.kind === "session") return addNews({ ...it, from: "🤖 " + (it.from || "다른 세션"), chat: it.chat || "세션 보고" }, fresh);
   $("empty")?.remove();
@@ -367,6 +390,7 @@ function render(it, fresh) {
   if (it.chat) { const c = document.createElement("span"); c.className = "chip"; c.textContent = it.chat; meta.append(c); }
   const ts = document.createElement("span"); ts.textContent = it.ts; meta.append(ts);
   const b = document.createElement("div"); b.className = "bubble"; linkify(b, it.text || "");
+  meta.append(pinButton(it.id));
   row.append(meta, b);
   // 내가 보낸 말 취소: 미나가 아직 안 가져갔으면 없던 일로, 가져갔으면 미나에게 '취소' 알림
   if (it.kind === "user") {
@@ -402,6 +426,58 @@ function render(it, fresh) {
   row.id = "it" + it.id;
   list.insertBefore(row, $("typing"));
   if (it.kind === "teams") addNews(it, fresh);
+}
+// ── 📌 메시지 고정 ── 아이템 id 를 브라우저에 기억. 원문 전체·보낸 사람·시각·원래 버튼을 메인 패널 탭 아래 띠에
+const itemsById = {}, pinFold = new Set();
+let pins = [];
+try { pins = JSON.parse(localStorage.getItem("pins") || "[]").filter(Number.isFinite); } catch {}
+function savePins() { try { localStorage.setItem("pins", JSON.stringify(pins)); } catch {} }
+function pinButton(id) {
+  const b = document.createElement("button"); b.type = "button"; b.className = "pinbtn" + (pins.includes(id) ? " on" : "");
+  b.dataset.pin = id; b.textContent = "📌"; b.title = "메인 패널에 고정";
+  b.onclick = e => { e.stopPropagation(); pins.includes(id) ? unpin(id) : (pins.push(id), savePins(), renderPins()); };
+  return b;
+}
+function unpin(id) { if (!pins.includes(id)) return; pins = pins.filter(x => x !== id); pinFold.delete(id); savePins(); renderPins(); }
+function quoteToInput(it) {
+  const s = String(it.text || "").replace(/\s+/g, " ").trim();
+  ta.value = `「${s.slice(0, 60)}${s.length > 60 ? "…" : ""}」 → `;
+  ta.dispatchEvent(new Event("input")); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+function pinLinks(it) {  // 원래 카드에 있던 바로가기(mgit·문서·GitLab 열기)
+  const out = [];
+  if (it.mgit) out.push([isDoc(it.mgit) ? "📄 열기" : "🔍 mgit", () => openMgit(it.mgit, true)]);
+  if (it.doc) out.push(["📝 변경 설명", () => openDoc(it.doc, true)]);
+  const num = (it.key || "").split("#")[1];
+  if (num && !it.mgit && mgitByNum[num]) out.push(["🔍 mgit", () => openMgit(mgitByNum[num], true)]);
+  if (num && !it.doc && docByNum[num]) out.push(["📝 문서", () => openDoc(docByNum[num], true)]);
+  const gl = it.news && String(it.text || "").match(/https?:\/\/[^\s]*gitlab[^\s]*/);
+  if (gl) out.push(["🦊 열기", async () => { try { await fetch("/api/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: gl[0] }) }); } catch {} }]);
+  return out;
+}
+function renderPins() {
+  const band = $("pins"); band.innerHTML = "";
+  const shown = pins.filter(id => itemsById[id]);
+  band.hidden = !shown.length;
+  for (const id of shown) {
+    const it = itemsById[id], fold = pinFold.has(id);
+    const c = el("div", "pin" + (fold ? " fold" : ""));
+    const h = el("div", "ph"), t = el("span", "pt");
+    const name = it.news ? (it.from || "Teams") : it.kind === "mina" ? UI.assistant : it.kind === "user" ? "나" : (it.from || it.kind);
+    t.append(el("span", null, fold ? "▸" : "▾"), el("b", null, "📌 " + name));
+    const sub = [it.chat, it.ts].filter(Boolean).join(" · "); if (sub) t.append(el("span", null, sub));
+    t.title = fold ? "펼치기" : "접기";
+    t.onclick = () => { fold ? pinFold.delete(id) : pinFold.add(id); renderPins(); };
+    const pb = el("span", "pb");
+    const q = el("button", null, "↘ 인용해서 말하기"); q.type = "button"; q.onclick = () => quoteToInput(it);
+    const x = el("button", "unpin", "× 풀기"); x.type = "button"; x.onclick = () => unpin(id);
+    pb.append(q, x); h.append(t, pb);
+    const px = el("div", "px"), tx = el("div", "tx2"); linkify(tx, it.text || ""); px.append(tx);
+    const links = pinLinks(it);
+    if (links.length) { const pa = el("div", "pa"); for (const [label, fn] of links) { const b = el("button", null, label); b.type = "button"; b.onclick = fn; pa.append(b); } px.append(pa); }
+    c.append(h, px); band.append(c);
+  }
+  document.querySelectorAll(".pinbtn").forEach(b => b.classList.toggle("on", pins.includes(+b.dataset.pin)));
 }
 // 읽음 상태는 이 브라우저에 기억(서버 id 기준)
 let newsCount = 0, readIds = new Set();
@@ -476,6 +552,7 @@ function groupNews(key) {
   }
 }
 function addNews(it, fresh) {
+  itemsById[it.id] = { ...it, news: true };
   newsMeta[it.id] = { key: it.key || "", text: String(it.text || "").split("\n")[0].slice(0, 140) };
   if (!newsCount) $("news").innerHTML = "";
   newsCount++;
@@ -522,7 +599,7 @@ function addNews(it, fresh) {
     try { await fetch("/api/news/state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: +n.dataset.id, state: "done" }) }); } catch {}
     poll();
   };
-  const box = document.createElement("span"); box.className = "stbox"; box.append(ok, chip);
+  const box = document.createElement("span"); box.className = "stbox"; box.append(pinButton(it.id), ok, chip);
   n.append(box);
   applyState(n, it.state || "new");
   n.onclick = () => {
@@ -566,6 +643,7 @@ function openStateMenu(n, chip) {
   del.onclick = async e => {
     e.stopPropagation(); closeStateMenu();
     try { await fetch("/api/news/hide", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: +n.dataset.id }) }); } catch {}
+    unpin(+n.dataset.id);
     const key = n.dataset.key; n.remove(); newsCount = Math.max(0, newsCount - 1); $("newsn").textContent = newsCount ? newsCount + "건" : "";
     if (key) groupNews(key);
     countUnread(); renderNeeds();
@@ -629,6 +707,7 @@ async function poll(first) {
     }
     typing(lastUser > lastMina);
     if (stick && j.items.length) { pinned = true; list.scrollTop = list.scrollHeight; }
+    if (first) { pins = pins.filter(id => itemsById[id]); savePins(); renderPins(); }  // 서버에서 사라진(숨김) 아이템은 고정에서 뺀다
     if (first) requestAnimationFrame(() => requestAnimationFrame(() => { pinned = true; toBottom(); }));
     // 서버가 새 mgit 주소를 줄 때만 연다. 첫 로드엔 브라우저에 기억된 주소가 우선
     // 정시 묶음·1:1 보류 중인 소식 수(아직 소식판에 안 올라온 것) — 사이드바 제목에 툴팁으로만
@@ -888,6 +967,8 @@ $("clear").onclick = async () => {
   await fetch("/api/news/clear", { method: "POST" });
   newsCount = 0; $("newsn").textContent = ""; $("unread").hidden = true; document.title = appTitle();
   $("news").innerHTML = '<div class="news" style="cursor:default;color:var(--mute)">아직 없음</div>';
+  for (const id in itemsById) if (itemsById[id].news) delete itemsById[id];
+  pins = pins.filter(id => itemsById[id]); savePins(); renderPins();
 };
 loadConfig().finally(() => { buildShort(); poll(true); setInterval(poll, 500); }); ta.focus();
 // 경계선 끌기: 넓은 화면은 대화 폭(--chatw), 좁은 화면은 메인 높이(--mainh). 브라우저에 기억
