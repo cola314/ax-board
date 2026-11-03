@@ -1,6 +1,7 @@
 """비서 대시보드 '진행 중' 표시. 미나가 뒤에서 일을 돌릴 때 등록하고 끝나면 지운다.
   python -I scripts/secretary/task.py start <id> "<제목>"
   python -I scripts/secretary/task.py progress <id> <0-100> "<지금 하는 단계>" [--eta <남은 분>]
+  python -I scripts/secretary/task.py fail <id> "<사유>"     실패 → 대시보드에 ❌ 미나 카드 한 번
   python -I scripts/secretary/task.py done <id>
 """
 import json
@@ -24,6 +25,8 @@ if __name__ == "__main__":
             i = rest.index("--eta")
             eta, rest = float(rest[i + 1]), rest[:i] + rest[i + 2:]
         body = {"id": tid, "progress": int(sys.argv[3]), "note": " ".join(rest), "eta_min": eta}
+    elif cmd == "fail":
+        body = {"id": tid, "failed": True, "note": " ".join(sys.argv[3:])}
     else:
         body = {"id": tid, "done": True}
     req = urllib.request.Request(BASE + "/api/task", data=json.dumps(body).encode("utf-8"),

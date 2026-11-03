@@ -13,7 +13,7 @@
   POST /api/items {.., tier}  tier: now(기본)·hour(정시 묶음)·soon(+conv,at: 1:1 10분 뒤, 이미 답했으면 무시)·none(바로 무시)
   POST /api/my_last         {대화방 id: 내가 마지막으로 보낸 시각} — soon 판정용
   POST /api/notify        다른 세션의 보고 {from, text} → 카드 + 미나 수신함
-  POST /api/task          {id, title} 진행 중 등록 / {id, progress, note, eta_min?} 진행률 / {id, done:true} 완료
+  POST /api/task          {id, title} 진행 중 등록 / {id, progress, note, eta_min?} 진행률 / {id, failed:true, note} 실패 / {id, done:true} 완료
   POST /api/status        현황 칸 데이터(서버가 5분마다 직접 모음, 수동 갱신용)
   POST /api/view          {mgit: url} → 대시보드 mgit 탭
   POST /api/news/hide     {id} 소식 하나 지우기(숨김)
@@ -52,6 +52,7 @@ heartbeat = [0.0]  # 감시꾼이 마지막으로 수신함을 확인한 시각(
 held = []  # 아직 소식판에 안 올린 보류 소식 [{release_at, conv?, at?, kind, kw}]
 my_last = {}  # 대화방별 내가 마지막으로 보낸 시각(ISO) — 감시꾼이 넘겨 줌
 SOON = 600
+TASK_STALE = 1800  # 뒤에서 도는 일이 이만큼(초) 등록·진행 보고 없이 조용하면 미나 카드로 한 번 알린다
 
 
 STATES = ("new", "doing", "review", "done", "skip")
@@ -253,15 +254,19 @@ class H(BaseHTTPRequestHandler):
             tid = str(b.get("id") or "")
             if b.get("done"):
                 tasks.pop(tid, None)
-            elif "progress" in b:
+            elif "progress" in b or b.get("failed"):
                 if tid:  # 서버 재시작으로 등록이 날아갔어도 진행률이 오면 다시 살린다
                     tasks.setdefault(tid, {"id": tid, "title": str(b.get("title") or tid), "started": time.time()})
-                    tasks[tid]["progress"] = max(0, min(100, int(b.get("progress") or 0)))
+                    tasks[tid]["last_change"] = time.time()
+                    if "progress" in b:
+                        tasks[tid]["progress"] = max(0, min(100, int(b.get("progress") or 0)))
                     tasks[tid]["note"] = str(b.get("note") or "")[:80]
+                    if b.get("failed"):
+                        tasks[tid]["failed"] = True
                     if b.get("eta_min") is not None:  # 일하는 쪽이 직접 낸 남은 시간 추정(분) → 끝날 시각으로 저장
                         tasks[tid]["eta_at"] = time.time() + float(b["eta_min"]) * 60
             elif tid:
-                tasks[tid] = {"id": tid, "title": str(b.get("title") or tid), "started": time.time()}
+                tasks[tid] = {"id": tid, "title": str(b.get("title") or tid), "started": time.time(), "last_change": time.time()}
             with lock:
                 save()
             return self.send(200, {"tasks": list(tasks.values())})
@@ -346,10 +351,41 @@ def replied(h):
     return bool(mine and at and str(mine) > str(at))
 
 
+def task_alert(t, now):
+    """뒤에서 도는 일 하나의 예외 알림 (종류, 문구). 없으면 None. 같은 종류 경고는 작업당 한 번(t['alerted'] 로 거름)."""
+    done = t.get("alerted") or []
+    if t.get("failed"):
+        return None if "failed" in done else ("failed", "❌ %s 실패: %s" % (t["title"], t.get("note") or "사유 없음"))
+    if "stale" not in done and now - float(t.get("last_change", t.get("started", now))) > TASK_STALE:
+        return "stale", "⚠️ %s — %d분째 소식 없음" % (t["title"], TASK_STALE // 60)
+    return None
+
+
+def check_tasks():
+    """평소엔 배지만 두고, 30분 무소식·실패일 때만 미나 카드로 알린다. 실패한 일은 목록에서 뺀다."""
+    now, out = time.time(), []
+    with lock:
+        for tid, t in list(tasks.items()):
+            a = task_alert(t, now)
+            if a:
+                t["alerted"] = (t.get("alerted") or []) + [a[0]]
+                out.append(a[1])
+            if t.get("failed"):
+                tasks.pop(tid, None)
+        if out:
+            save()
+    for text in out:
+        add("mina", text=text, alert="task")
+
+
 def release_loop():
     """보류 소식을 때가 되면 소식판에 올린다(정시 묶음은 한꺼번에, 1:1 은 내가 이미 답했으면 무시로)."""
     while True:
         time.sleep(20)
+        try:
+            check_tasks()
+        except Exception as e:
+            print("TASK_CHECK_SKIP", e, file=sys.stderr, flush=True)
         now = time.time()
         with lock:
             due = [h for h in held if h["release_at"] <= now]
