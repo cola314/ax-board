@@ -48,6 +48,7 @@ Claude Code 세션 하나를 "먼저 말 거는 비서"로 쓰는 로컬 도구.
 | `port` | 서버 포트, 기본 8790 (env `SECRETARY_PORT` 우선) |
 | `root` | 상대 경로 기준. 비우면 `scripts/` 의 부모(레포 루트) |
 | `features.{teams,gmail,gitlab,calendar,flex,status}` | 꺼진 기능은 감시꾼이 import 도 안 한다. 대시보드 입력·다른 세션 보고는 항상 켜짐 |
+| `features.review_check` / `review_check.times` | 정기 점검(기본 켜짐, `["11:30", "17:00"]`). 근무일(월~금) 그 시각에 감시꾼이 `{"source": "review-check", "slot": "11:30"}` 로 한 번 깨움. 늦게 떠도 그날 마지막 슬롯 +2시간 안이면 한 번 |
 | `gitlab.host` / `username` / `cli` | glab 호스트·내 아이디·실행 파일 이름 |
 | `gitlab.branch_prefix` | 내 브랜치 접두어(비우면 `feature/<username>`) |
 | `gmail.window_title_regex` | Gmail 창 제목 정규식. 없으면 감시꾼이 앱 창으로 다시 띄운다 |

@@ -12,7 +12,7 @@ import sys
 import threading
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))  # teams_cache, teams_watch
@@ -62,6 +62,23 @@ def gitlab_tier(g):
     return "hour" if t.startswith(("리뷰 요청", "승인 요청")) else "now"
 
 
+def review_slot(now, times, done, grace=2):
+    """정기 점검: 지금(now, 로컬 datetime) 깨울 슬롯("HH:MM") 또는 None.
+    근무일(월~금)만. 지난 슬롯 중 가장 최근 것이 아직 안 했으면(done 에 "YYYY-MM-DD HH:MM" 없음) 그 슬롯.
+    늦게 떠도 한 번은 깨우되, 그날 마지막 슬롯 + grace 시간이 지났으면 생략."""
+    if now.weekday() >= 5 or not times:
+        return None
+    day = now.strftime("%Y-%m-%d")
+    at = lambda t: datetime.strptime(day + " " + t, "%Y-%m-%d %H:%M")
+    slots = sorted(times, key=at)
+    if now > at(slots[-1]) + timedelta(hours=grace):
+        return None
+    passed = [t for t in slots if at(t) <= now]
+    if not passed or "%s %s" % (day, passed[-1]) in done:
+        return None
+    return passed[-1]
+
+
 def talking(mine, at):
     """내가 그 방에 마지막으로 보낸 시각(mine)이 이 메시지(at)보다 TALKING 초 안쪽이면 True."""
     if not mine or not at:
@@ -82,7 +99,7 @@ def main():
     if a.reply:
         api("/api/items", {"kind": "mina", "text": a.reply})
 
-    teams, gmail, gitlab, cal_on = (config.on(f) for f in ("teams", "gmail", "gitlab", "calendar"))
+    teams, gmail, gitlab, cal_on, review_on = (config.on(f) for f in ("teams", "gmail", "gitlab", "calendar", "review_check"))
     if teams:
         import teams_cache
         import teams_watch
@@ -100,7 +117,7 @@ def main():
     seen = set(st.get("seen", []))
     if gmail:
         st.setdefault("mail_since", mail_notify.now_filetime())
-    start, last, out, mail_sig, gmail_checked, cal_checked = time.time(), None, [], None, 0.0, 0.0
+    start, last, out, mail_sig, gmail_checked, cal_checked, review_checked = time.time(), None, [], None, 0.0, 0.0, 0.0
     gitlab_q = queue.Queue()
 
     def gitlab_loop():  # 조회 한 번에 20초쯤 걸려 메인 루프(0.5초 주기)를 막지 않게 따로 돈다
@@ -181,6 +198,14 @@ def main():
                 else:
                     out.append(dict(e, source="calendar"))
             save_state(st)
+        if review_on and time.time() - review_checked > 15:
+            review_checked = time.time()
+            now_l = datetime.now()
+            slot = review_slot(now_l, config.get("review_check.times") or [], set(st.get("review_done", [])))
+            if slot:  # 하루 정해진 시각에 한 번씩: 미나가 할 일·진행 중을 모아 '오늘 안 끝내면 곤란한 것' 정리
+                st["review_done"] = st.get("review_done", [])[-20:] + [now_l.strftime("%Y-%m-%d ") + slot]
+                out.append({"source": "review-check", "slot": slot})
+                save_state(st)
         while not gitlab_q.empty():
             g = gitlab_q.get()
             api("/api/items", {"kind": "teams", "from": "🦊 " + g["from"], "chat": g["chat"], "text": g["text"], "tier": gitlab_tier(g)})

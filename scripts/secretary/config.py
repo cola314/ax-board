@@ -18,13 +18,15 @@ DEFAULTS = {
     "me": {"name": "", "aliases": []},             # Teams 표시 이름(내 메시지 거르기) + 깨울 호칭
     "port": 8790,
     "root": "",                                    # 상대 경로 기준. 비우면 scripts/ 의 부모(레포 루트)
-    "features": {"teams": False, "gmail": False, "gitlab": False, "calendar": False, "flex": False, "status": False},
+    "features": {"teams": False, "gmail": False, "gitlab": False, "calendar": False, "flex": False, "status": False,
+                 "review_check": True},                    # 정기 점검(근무일 review_check.times 에 미나를 깨움)
     "gitlab": {"host": "gitlab.com", "username": "", "cli": "glab", "branch_prefix": ""},
     "gmail": {"window_title_regex": "", "chrome_path": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
               "chrome_profile": "Default", "url": "https://mail.google.com/mail/u/0/#inbox"},
     "repos": {"sources_dir": "sources"},
     "todo": {"file": "TODO.md", "section": "🔥 진행 중"},
     "flex": {"user_key": ""},
+    "review_check": {"times": ["11:30", "17:00"]},  # 정기 점검 시각(로컬, HH:MM). 늦게 떠도 마지막 +2시간까지는 한 번
     # 같은 일감 소식 묶음 키 '프로젝트#번호'. 정규식 그룹 1=프로젝트, 2=번호. 순서대로 먼저 맞는 것
     "news": {"key_patterns": [r"/([\w.-]+)/-/(?:work_items|issues)/(\d+)",   # GitLab 일감 URL
                               r"^(?:Re: )?([\w.-]+) \|.*\(#(\d+)\)"],         # GitLab 알림 메일 "proj | 제목 (#249)"
