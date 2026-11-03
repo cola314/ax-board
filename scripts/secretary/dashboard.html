@@ -31,13 +31,13 @@
 /* 누르는 영역(접기 묶음·소식 카드·경계선·레일)은 연속 클릭해도 글자가 선택되지 않게. 펼친 소식 본문은 복사할 수 있게 둔다 */
 .toggle, nav .sh, .news .who, .news .sub, .split, body.rail nav, .seg, .pbtn, .quick button, .actions button { user-select:none; -webkit-user-select:none; }
 /* 스크롤바: 얇고 둥글게, 평소엔 흐리게 */
-* { scrollbar-width:thin; scrollbar-color:color-mix(in srgb, var(--mute) 45%, transparent) transparent; }
 ::-webkit-scrollbar { width:8px; height:8px; }
 ::-webkit-scrollbar-track { background:transparent; }
 ::-webkit-scrollbar-thumb { background:color-mix(in srgb, var(--mute) 35%, transparent); border-radius:999px; border:2px solid transparent; background-clip:padding-box; }
 ::-webkit-scrollbar-thumb:hover { background:color-mix(in srgb, var(--mute) 65%, transparent); background-clip:padding-box; }
 ::-webkit-scrollbar-button { display:none; height:0; width:0; }
 ::-webkit-scrollbar-corner { background:transparent; }
+@supports not selector(::-webkit-scrollbar) { * { scrollbar-width:thin; scrollbar-color:color-mix(in srgb, var(--mute) 45%, transparent) transparent; } }
 html, body { height:100%; }
 body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.55 "Pretendard","Malgun Gothic",system-ui,sans-serif; display:flex; flex-direction:column; }
 header { padding:10px 16px; border-bottom:1px solid var(--line); background:var(--panel); display:flex; align-items:center; gap:10px; flex-wrap:nowrap; min-width:0; }

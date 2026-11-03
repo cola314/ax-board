@@ -132,6 +132,18 @@ def add(kind, **kw):
         return item
 
 
+# 준비자료 HTML 에 주입하는 스크롤바 스타일. Chromium 121+ 은 표준 scrollbar-width/color 가 있으면
+# ::-webkit-scrollbar 를 무시하고 OS 기본(화살표 버튼)을 그리므로 표준 속성은 무력화하고 webkit 만 쓴다.
+SCROLLBAR_CSS = b"""<style>
+*{scrollbar-width:auto!important;scrollbar-color:auto!important}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
+::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--muted,var(--mute,#8b93a3)) 35%,transparent);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--muted,var(--mute,#8b93a3)) 65%,transparent);background-clip:padding-box}
+::-webkit-scrollbar-button{display:none;width:0;height:0}
+</style>"""
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -171,7 +183,10 @@ class H(BaseHTTPRequestHandler):
             name = os.path.basename(u.path[len("/brief/"):])
             try:
                 with open(os.path.join(BRIEFS, name + ".html"), "rb") as f:
-                    return self.send(200, f.read(), "text/html; charset=utf-8")
+                    html = f.read()
+                i = html.lower().rfind(b"</head>")  # 스크롤바 공통 스타일 주입 — 문서마다 넣지 않아도 대시보드와 같게
+                html = html[:i] + SCROLLBAR_CSS + html[i:] if i >= 0 else SCROLLBAR_CSS + html
+                return self.send(200, html, "text/html; charset=utf-8")
             except OSError:
                 return self.send(404, {"error": "no brief"})
         if u.path == "/api/items":
