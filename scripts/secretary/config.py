@@ -19,13 +19,15 @@ DEFAULTS = {
     "port": 8790,
     "root": "",                                    # 상대 경로 기준. 비우면 scripts/ 의 부모(레포 루트)
     "features": {"teams": False, "gmail": False, "gitlab": False, "calendar": False, "flex": False, "status": False,
-                 "review_check": True},                    # 정기 점검(근무일 review_check.times 에 미나를 깨움)
+                 "review_check": True,                     # 정기 점검(근무일 review_check.times 에 미나를 깨움)
+                 "attendance": True},                      # 현황판 맨 위 근무시간 한 줄(attendance.json 이 있을 때만)
     "gitlab": {"host": "gitlab.com", "username": "", "cli": "glab", "branch_prefix": ""},
     "gmail": {"window_title_regex": "", "chrome_path": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
               "chrome_profile": "Default", "url": "https://mail.google.com/mail/u/0/#inbox"},
     "repos": {"sources_dir": "sources"},
     "todo": {"file": "TODO.md", "section": "🔥 진행 중"},
     "flex": {"user_key": ""},
+    "attendance": {"week_hours": 40},              # 주 목표 근무시간(근무시간 위젯의 남은 시간·추천 퇴근 계산)
     "review_check": {"times": ["11:30", "17:00"]},  # 정기 점검 시각(로컬, HH:MM). 늦게 떠도 마지막 +2시간까지는 한 번
     # 같은 일감 소식 묶음 키 '프로젝트#번호'. 정규식 그룹 1=프로젝트, 2=번호. 순서대로 먼저 맞는 것
     "news": {"key_patterns": [r"/([\w.-]+)/-/(?:work_items|issues)/(\d+)",   # GitLab 일감 URL

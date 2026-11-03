@@ -1,7 +1,7 @@
 """미나 비서 대시보드 우체통 서버. 내용은 메모리에만 둔다(재시작하면 비워짐).
 
   GET  /                  대시보드
-  GET  /api/items?after=N 카드 목록
+  GET  /api/items?after=N 카드 목록(+ attendance: 이번 주 근무시간 요약, features.attendance)
   GET  /api/config        대시보드 화면용 설정(config dashboard 절 + 사용자 이름)
   GET  /brief/<이름>      회의 준비자료 HTML(artifacts/secretary/briefs/<이름>.html)
   GET  /api/rules         운영 규칙 마크다운(config rules.file) — 대시보드 📜 규칙 보기
@@ -145,6 +145,99 @@ SCROLLBAR_CSS = b"""<style>
 </style>"""
 
 
+# ── 근무시간(현황판 맨 위 한 줄) ── attendance.json(attendance_set.py 가 저장) + 지금 시각.
+# 규칙은 /attendance 스킬 '핵심 상수': 주 40h, 점심 12-13 1h, 퇴근 19시 넘으면 저녁 19-20 1h, 휴일·연차 8h
+ATT_FILE = os.path.join(os.path.dirname(CHAT), "attendance.json")
+LUNCH, DINNER, OFF_DAY = (720, 780), (1140, 1200), 480
+
+
+def _hm(s):
+    h, m = str(s).split(":")
+    return int(h) * 60 + int(m)
+
+
+def _fmt(m):
+    return "%02d:%02d" % divmod(int(m), 60)
+
+
+def work_min(start, end):
+    """출근~퇴근(분) 사이 근무 분: 점심 겹침 빼고, 퇴근이 19시를 넘으면 저녁 겹침도 뺀다."""
+    if end <= start:
+        return 0
+    w = end - start - max(0, min(end, LUNCH[1]) - max(start, LUNCH[0]))
+    if end > DINNER[0]:
+        w -= max(0, min(end, DINNER[1]) - max(start, DINNER[0]))
+    return w
+
+
+def leave_at(start, need):
+    """need 분을 채우는 가장 이른 퇴근(분). 보통 start+need+60(점심), 19시를 넘으면 +60(저녁) — 스킬 계산식과 같음."""
+    end = start + max(0, need)
+    while work_min(start, end) < need:
+        end += 1
+    return end
+
+
+def attendance(now=None, data=None, week_hours=None):
+    """이번 주 근무 요약. 오늘은 지금 시각까지, 남은 시간은 남은 근무일(오늘 포함, 휴일·연차·퇴근한 날 제외)로 균등 분배."""
+    now = now or time.localtime()
+    if data is None:
+        try:
+            with open(ATT_FILE, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return None
+    goal = int(float(week_hours or config.get("attendance.week_hours") or 40) * 60)
+    today, now_m = time.strftime("%Y-%m-%d", now), now.tm_hour * 60 + now.tm_min
+    rows, before, today_min, days_left, today_in, today_out = [], 0, 0, 0, None, None
+    for d in data.get("days") or []:
+        date, i, o, off = d.get("date") or "", d.get("in"), d.get("out"), d.get("off") or []
+        if off:
+            m, kind = OFF_DAY, "off"
+        elif date < today:
+            m, kind = (work_min(_hm(i), _hm(o)) if i and o else 0), "past"
+        elif date == today:
+            kind, today_in, today_out = "today", i, o
+            m = work_min(_hm(i), _hm(o) if o else max(now_m, _hm(i))) if i else 0
+            if not o:
+                days_left += 1
+        else:
+            m, kind = 0, "future"
+            days_left += 1
+        if kind == "today":
+            today_min = m
+        else:
+            before += m
+        rows.append({"date": date, "in": i, "out": o, "off": off, "min": m, "kind": kind})
+    done = before + today_min
+    per_day = (goal - before) / days_left if days_left else None  # 오늘 포함 남은 날 하루 몫
+    leave = None
+    if per_day is not None and today_in and not today_out:
+        leave = leave_at(_hm(today_in), max(0, round(per_day)))
+    return {"week_hours": goal // 60, "goal": goal, "done": done, "left": max(0, goal - done), "days_left": days_left,
+            "per_day": round(max(0, per_day)) if per_day is not None else None, "today": today, "in": today_in,
+            "out": today_out, "leave": _fmt(leave) if leave is not None else None,
+            "leave_late": leave is not None and leave > 22 * 60,  # 퇴근 가능 범위(~22:00)를 넘으면 하루로 못 채움
+            "fetched": data.get("fetched") or "",
+            "stale": not str(data.get("fetched") or "").startswith(today), "rows": rows}
+
+
+_att_cache = [None, None]
+
+
+def attendance_cached():
+    """대시보드가 0.5초마다 묻는다 — 파일 수정 시각·분이 같으면 다시 계산하지 않는다."""
+    if not config.on("attendance"):
+        return None
+    try:
+        sig = (os.path.getmtime(ATT_FILE), time.strftime("%Y-%m-%d %H:%M"))
+    except OSError:
+        return None
+    if _att_cache[0] != sig:
+        _att_cache[:] = [sig, attendance()]
+    return _att_cache[1]
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -196,6 +289,7 @@ class H(BaseHTTPRequestHandler):
                 return self.send(200, {"items": [i for i in items[after:] if not i.get("hidden")], "pending": len(inbox),
                                        "listen_age": round(time.time() - heartbeat[0]) if heartbeat[0] else None,
                                        "mgit": view["mgit"], "tasks": list(tasks.values()), "status": status, "held": len(held),
+                                       "attendance": attendance_cached(),
                                        "states": {i["id"]: i.get("state", "new") for i in items if i["kind"] in NEWS_KINDS and not i.get("hidden")}})
         self.send(404, {"error": "not found"})
 

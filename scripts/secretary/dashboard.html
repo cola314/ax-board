@@ -25,6 +25,25 @@
 @media (prefers-color-scheme: dark) { .card.need { background:#3b2f12; border-color:#5c4a1a; color:#fde68a; } }
 .card.need h3 small { color:inherit; opacity:.75; }
 .card.need .it { border-top-color:rgba(0,0,0,.08); }
+/* 🕘 근무시간: 현황판 맨 위 한 줄(항상), 누르면 요일별 표. 막대는 정지(애니메이션 없음) */
+.card.att { grid-column:1 / -1; padding:6px 10px; }
+.att .line { display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12.5px; min-width:0; user-select:none; }
+.att .line .t { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.att .meter { flex:none; width:90px; height:6px; border-radius:999px; background:var(--line); overflow:hidden; }
+.att .meter i { display:block; height:100%; background:#10b981; }
+.att .warn { color:#b45309; font-weight:600; }
+@media (prefers-color-scheme: dark) { .att .warn { color:#fbbf24; } }
+.att table { width:100%; border-collapse:collapse; font-size:12px; margin-top:6px; font-variant-numeric:tabular-nums; }
+.att th, .att td { padding:3px 6px; border-top:1px solid var(--line); text-align:left; white-space:nowrap; }
+.att th { color:var(--mute); font-weight:400; }
+.att tr.today td { font-weight:700; }
+.att td.n { color:var(--mute); white-space:normal; }
+@media (max-width:720px) { .att .line .t { white-space:normal; } .att .meter { width:48px; } }
+/* 카드 텍스트 속 링크(일감·MR·문서·mgit) 바로 열기 — 카드 하단 작은 버튼 */
+.olinks { display:flex; gap:4px; flex-wrap:wrap; margin:4px 2px 0; }
+.olinks button { font:inherit; font-size:11px; line-height:18px; padding:0 8px; border-radius:999px; border:1px solid var(--line); background:var(--panel); color:var(--mute); cursor:pointer; user-select:none; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.olinks button:hover { color:var(--fg); border-color:var(--mute); }
+.actions button.ship { font-weight:600; }
 .card .it .go { flex:none; background:#f59e0b; color:#1f1300; border:0; border-radius:999px; padding:2px 10px; font:inherit; font-size:12px; font-weight:700; cursor:pointer; user-select:none; }
 .toggle { display:inline-flex; align-items:center; gap:6px; cursor:pointer; padding:2px 6px; margin:-2px 0 -2px -4px; border-radius:6px; }
 .toggle:hover { background:var(--bg); }
@@ -375,6 +394,34 @@ function linkify(el, text) {
   }
   el.append(text.slice(i));
 }
+// 카드 텍스트 속 링크 → [열기] 버튼: GitLab 일감·MR(서버가 크롬으로), /brief/ 문서·mgit 주소(메인 패널). skip = 이미 버튼이 있는 주소
+const bareUrl = u => String(u || "").replace(/[?&]embed=1\b/, "");
+function openGitlab(url) { fetch("/api/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) }).catch(() => {}); }
+function textLinks(text, skip) {
+  const out = [], seen = new Set((skip || []).filter(Boolean).map(bareUrl));
+  for (const m of String(text || "").matchAll(/https?:\/\/[\w\-.~:\/?#@!$&*+,;=%]+/g)) {
+    const u = m[0].replace(/[.,;:!?]+$/, ""), k = bareUrl(u);
+    if (seen.has(k)) continue;
+    let g, item;
+    if ((g = /\/-\/(issues|work_items|merge_requests)\/(\d+)/.exec(u))) item = [(g[1] === "merge_requests" ? "🦊 !" : "🦊 #") + g[2], () => openGitlab(u)];
+    else if (isDoc(u)) item = ["📄 " + decodeURIComponent(u.split("/brief/")[1] || "문서").slice(0, 28), () => openDoc(u, true)];
+    else if (/\/\?c=[0-9a-f]{6,}/.test(u)) item = ["🔍 mgit", () => openMgit(u, true)];
+    if (!item) continue;
+    seen.add(k); item[2] = u; out.push(item);
+  }
+  return out;
+}
+function linkRow(text, skip) {
+  const links = textLinks(text, skip);
+  if (!links.length) return null;
+  const d = document.createElement("div"); d.className = "olinks";
+  for (const [label, fn, url] of links) {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.title = url;
+    b.onclick = e => { e.stopPropagation(); fn(); };
+    d.append(b);
+  }
+  return d;
+}
 function render(it, fresh) {
   itemsById[it.id] = it;
   if (it.kind === "teams") return addNews(it, fresh);
@@ -412,8 +459,19 @@ function render(it, fresh) {
       btn.onclick = () => openMgit(url, true);
       acts.append(btn);
     }
+    // 리뷰 카드(미나가 mgit 버튼을 단 '#N … 4(푸시)' 카드): 확인 창 뒤 대시보드 입력으로 push·MR 링크를 요청(버튼이 git 을 직접 실행하지 않음)
+    const num = it.kind === "mina" && it.mgit && !isDoc(it.mgit) && /4\s*\(푸시\)/.test(it.text || "") && (/#(\d+)/.exec(it.text || "") || [])[1];
+    if (num) {
+      for (const [label, ask, q] of [["⬆ push", `#${num} 푸시ㄱㄱ`, `#${num} push 할까요?`], ["🔀 MR 링크", `#${num} mr 생성링크 열어줘`, `#${num} MR 생성 링크를 열까요?`]]) {
+        const btn = document.createElement("button"); btn.type = "button"; btn.className = "ship"; btn.textContent = label; btn.title = ask;
+        btn.onclick = () => { if (confirm(q)) say(ask); };
+        acts.append(btn);
+      }
+    }
     row.append(acts);
   }
+  const ol = linkRow(it.text, [it.mgit, it.doc]);
+  if (ol) row.append(ol);
   if (it.kind === "teams") {
     const acts = document.createElement("div"); acts.className = "actions";
     for (const [label, ask] of UI.quick) {
@@ -453,6 +511,7 @@ function pinLinks(it) {  // 원래 카드에 있던 바로가기(mgit·문서·G
   if (num && !it.doc && docByNum[num]) out.push(["📝 문서", () => openDoc(docByNum[num], true)]);
   const gl = it.news && String(it.text || "").match(/https?:\/\/[^\s]*gitlab[^\s]*/);
   if (gl) out.push(["🦊 열기", async () => { try { await fetch("/api/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: gl[0] }) }); } catch {} }]);
+  for (const [label, fn] of textLinks(it.text, [gl && gl[0], it.mgit, it.doc])) out.push([label, fn]);
   return out;
 }
 function renderPins() {
@@ -535,7 +594,7 @@ function renderNeeds() {
     if (doc) { const b = document.createElement("button"); b.type = "button"; b.className = "go"; b.textContent = "📝 설명"; b.onclick = () => openDoc(doc, true); it.append(b); }
     card.append(it);
   }
-  $("board").prepend(card);
+  attCard?.isConnected ? attCard.after(card) : $("board").prepend(card);
 }
 // 같은 일감(key) 소식은 맨 위(최신) 카드 하나만 보이고 "+n" 으로 묶는다. 누르면 나머지를 펼침
 function groupNews(key) {
@@ -579,6 +638,8 @@ function addNews(it, fresh) {
     ob.onclick = async e => { e.stopPropagation(); try { await fetch("/api/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: gl[0] }) }); } catch {} };
     who.append(ob);
   }
+  const ol = linkRow(it.text, [gl && gl[0], it.mgit, it.doc]);  // 머리의 🦊 열기와 겹치는 주소는 빼고 나머지 링크만
+  if (ol) n.insertBefore(ol, acts);
   // 펼칠 때 이 일감(#번호)에 미나가 붙인 mgit·문서가 있으면 바로 여는 버튼(카드가 나중에 와도 되게 펼칠 때마다 확인)
   const num = (it.key || "").split("#")[1];
   function linkButtons() {
@@ -714,6 +775,7 @@ async function poll(first) {
     $("sidetoggle").title = "눌러서 접기/펴기" + (j.held ? ` · 다음 정시에 올라올 소식 ${j.held}건` : "");
     if (j.mgit && j.mgit !== serverMgit) { const fresh = !first || !mgitUrl; serverMgit = j.mgit; if (fresh) openMgit(j.mgit, !first); }
     renderTasks(j.tasks || []);
+    if (JSON.stringify(j.attendance || null) !== lastAtt) { lastAtt = JSON.stringify(j.attendance || null); renderAtt(j.attendance); }
     if (j.status && JSON.stringify(j.status) !== lastStatus) { lastStatus = JSON.stringify(j.status); renderBoard(j.status); lastNeeds = ""; }
     applyStates(j.states);
     renderNeeds();
@@ -922,6 +984,7 @@ let lastBoard = {};
 function renderBoard(st) {
   lastBoard = st;
   const b = $("board"); b.innerHTML = "";
+  if (attCard) b.append(attCard);
   b.append(mrCard(st.mrs));
   b.append(card("🔥 진행 중", st.todo, (it, t) => it.append(titleCell(String(t).split(" — ")[0]))));
   b.append(card("📅 다음 회의", st.meetings, (it, e) => {
@@ -932,6 +995,47 @@ function renderBoard(st) {
     if (e.link) { const a = el("a", null, "🎥"); a.href = e.link; a.target = "_blank"; a.title = "회의 링크"; r.append(a); }
     it.append(r);
   }));
+}
+// 🕘 근무시간 한 줄(서버 attendance 요약: 오늘 출근·이번 주 누적·남은 시간·하루 몫·추천 퇴근). 누르면 요일별 표
+let attCard = null, lastAtt = "", attOpen = false;
+try { attOpen = localStorage.getItem("attOpen") === "1"; } catch {}
+const dur = m => `${Math.floor(m / 60)}h${String(Math.round(m) % 60).padStart(2, "0")}m`;
+function renderAtt(a) {
+  if (!a) { attCard?.remove(); attCard = null; return; }
+  if (!attCard) attCard = el("div", "card att");
+  const c = attCard; c.innerHTML = "";
+  const parts = [];
+  if (a.stale) parts.push(["⚠ 출퇴근 기록 갱신 필요(" + (a.fetched || "없음") + " 기준)", "warn"]);
+  const todayRow = (a.rows || []).find(r => r.kind === "today");
+  if (a.in) parts.push(a.out ? `오늘 ${a.in}~${a.out}` : `오늘 ${a.in} 출근`);
+  else if (todayRow) parts.push(["오늘 출근 기록 없음", "warn"]);
+  parts.push(`이번 주 ${dur(a.done)} / ${a.week_hours}h`);
+  if (!a.left) parts.push("목표 채움");
+  else parts.push(`남은 ${dur(a.left)}` + (a.per_day != null ? `(${a.days_left}일, 하루 약 ${dur(a.per_day)})` : "(남은 근무일 없음)"));
+  if (a.leave) parts.push(a.leave_late ? ["추천 퇴근 22시 넘음 — 하루로 못 채움", "warn"] : `추천 퇴근 ${a.leave}`);
+  const line = el("div", "line"), t = el("span", "t");
+  t.append("🕘 ");
+  parts.forEach((p, i) => { if (i) t.append(" · "); Array.isArray(p) ? t.append(el("span", p[1], p[0])) : t.append(p); });
+  t.title = t.textContent;
+  const meter = el("span", "meter"), bar = el("i"); bar.style.width = Math.min(100, a.done / a.goal * 100) + "%"; meter.append(bar);
+  meter.title = `${Math.round(a.done / a.goal * 100)}%`;
+  line.append(el("span", null, attOpen ? "▾" : "▸"), t, meter);
+  line.onclick = () => { attOpen = !attOpen; try { localStorage.setItem("attOpen", attOpen ? "1" : ""); } catch {} renderAtt(a); };
+  c.append(line);
+  if (attOpen) {
+    const tb = el("table"), hd = el("tr");
+    for (const h of ["요일", "날짜", "출근", "퇴근", "근무", ""]) hd.append(el("th", null, h));
+    tb.append(hd);
+    for (const r of a.rows || []) {
+      const d = new Date(r.date + "T00:00:00"), tr = el("tr", r.kind === "today" ? "today" : "");
+      const note = r.off.length ? "휴일·연차(8h)" : r.kind === "today" ? (a.out ? "퇴근" : "진행 중") + (a.per_day != null && !a.out ? ` · 계획 ${dur(a.per_day)}` : "")
+        : r.kind === "future" ? (a.per_day != null ? `계획 ${dur(a.per_day)}` : "") : (r.in && !r.out ? "퇴근 기록 없음" : "");
+      for (const [v, cls] of [[DOW[d.getDay()]], [`${d.getMonth() + 1}/${d.getDate()}`], [r.in || "–"], [r.out || "–"], [r.min || r.kind === "past" || r.kind === "today" ? dur(r.min) : "–"], [note, "n"]]) tr.append(el("td", cls, v));
+      tb.append(tr);
+    }
+    c.append(tb);
+  }
+  const b = $("board"); if (b.firstChild !== c) b.prepend(c);
 }
 // 소식 사이드바: 넓으면 펼침/레일(기억), 좁으면 레일 + 서랍
 const narrowView = () => matchMedia("(max-width: 720px)").matches;
