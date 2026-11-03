@@ -54,6 +54,14 @@ def api(path, body=None):
         return json.load(r)
 
 
+def gitlab_tier(g):
+    """GitLab 소식 표시 등급: 내 일감 할당·멘션은 바로, 리뷰 요청·내 MR 머지 가능은 정시 묶음, 머지됨·닫힘은 무시로."""
+    t = str(g.get("text") or "")
+    if g.get("from") == "내 MR":
+        return "hour" if t.startswith("승인 다 참") else "none"
+    return "hour" if t.startswith(("리뷰 요청", "승인 요청")) else "now"
+
+
 def talking(mine, at):
     """내가 그 방에 마지막으로 보낸 시각(mine)이 이 메시지(at)보다 TALKING 초 안쪽이면 True."""
     if not mine or not at:
@@ -127,9 +135,16 @@ def main():
         if sig and sig != last:
             last = sig
             msgs = teams_watch.new_messages(log, seen, st["since"], st.setdefault("my_last", {}))
+            if st.get("my_last"):
+                api("/api/my_last", st["my_last"])  # 1:1 보류 소식을 '이미 답함'으로 판정하게 서버에 넘김
             for m in msgs:
-                # 내 이름 언급은 바로, 1:1 은 10초 조용해지면, 그룹방은 대화가 잦아들 때 묶어서 깨운다
-                api("/api/items", {"kind": "teams", "from": m["from"], "chat": m["chat"], "text": m["text"]})
+                # 깨우기: 내 이름 언급은 바로, 1:1 은 10초 조용해지면, 그룹방은 대화가 잦아들 때 묶어서
+                # 소식판: 이름 언급은 바로, 1:1 은 10분 뒤(그새 내가 답했으면 무시로), 그룹방은 정시 묶음
+                mention = any(n in m["text"] for n in WAKE_NAMES)
+                dm = m["conversation"].endswith("@unq.gbl.spaces")
+                api("/api/items", {"kind": "teams", "from": m["from"], "chat": m["chat"], "text": m["text"],
+                                   "tier": "now" if mention else "soon" if dm else "hour",
+                                   "conv": m["conversation"], "at": m["time"]})
                 seen.add(m["id"])
                 st["seen"] = st.get("seen", []) + [m["id"]]
                 if any(n in m["text"] for n in WAKE_NAMES):
@@ -168,7 +183,7 @@ def main():
             save_state(st)
         while not gitlab_q.empty():
             g = gitlab_q.get()
-            api("/api/items", {"kind": "teams", "from": "🦊 " + g["from"], "chat": g["chat"], "text": g["text"]})
+            api("/api/items", {"kind": "teams", "from": "🦊 " + g["from"], "chat": g["chat"], "text": g["text"], "tier": gitlab_tier(g)})
             out.append(dict(g, source="gitlab"))
             save_state(st)
         if gmail and time.time() - gmail_checked > 60:
@@ -192,7 +207,8 @@ def main():
             mails = list(uniq.values())
             for m in mails:
                 # 메일은 바로 깨운다. 단 GitLab 알림 메일("Re: <프로젝트> | 제목")은 To-Do 로 같은 소식이 오니 소식판에만
-                api("/api/items", {"kind": "teams", "from": "✉️ " + m["from"], "chat": "메일", "text": m["text"]})
+                api("/api/items", {"kind": "teams", "from": "✉️ " + m["from"], "chat": "메일", "text": m["text"],
+                                   "tier": "none" if GITLAB_MAIL.match(m["text"]) else "hour"})
                 if not GITLAB_MAIL.match(m["text"]):
                     out.append(dict(m, source="mail"))
             save_state(st)

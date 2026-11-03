@@ -10,6 +10,8 @@
   POST /api/inbox/take    미나 수신함 비우며 가져오기
   POST /api/unsay          {id} 보낸 말 취소(안 가져갔으면 수신함에서 빼고, 가져갔으면 미나에게 취소 알림)
   POST /api/open           {url} GitLab 링크를 사용자 크롬으로 열기(GitLab 호스트만)
+  POST /api/items {.., tier}  tier: now(기본)·hour(정시 묶음)·soon(+conv,at: 1:1 10분 뒤, 이미 답했으면 무시)·none(바로 무시)
+  POST /api/my_last         {대화방 id: 내가 마지막으로 보낸 시각} — soon 판정용
   POST /api/notify        다른 세션의 보고 {from, text} → 카드 + 미나 수신함
   POST /api/task          {id, title} 진행 중 등록 / {id, progress, note, eta_min?} 진행률 / {id, done:true} 완료
   POST /api/status        현황 칸 데이터(서버가 5분마다 직접 모음, 수동 갱신용)
@@ -46,6 +48,10 @@ status = {}  # 대시보드 '현황' 칸(status_loop 가 5분마다 채움)
 STATUS_EVERY = 300
 status_kick = threading.Event()  # GitLab 소식(승인·머지·리뷰 요청 등)이 오면 5분 안 기다리고 현황(내 MR)을 바로 다시 모은다
 heartbeat = [0.0]  # 감시꾼이 마지막으로 수신함을 확인한 시각(2초마다)
+# 소식 표시 등급(tier): now=바로, hour=정시에 묶어서, soon=1:1 은 10분 기다렸다가 내가 이미 답했으면 무시로, none=바로 무시(skip)
+held = []  # 아직 소식판에 안 올린 보류 소식 [{release_at, conv?, at?, kind, kw}]
+my_last = {}  # 대화방별 내가 마지막으로 보낸 시각(ISO) — 감시꾼이 넘겨 줌
+SOON = 600
 
 
 STATES = ("new", "doing", "review", "done", "skip")
@@ -90,6 +96,8 @@ def load():
             saved = json.load(f)
     except (OSError, ValueError):
         return
+    held.extend(saved.get("held", []))
+    my_last.update(saved.get("my_last", {}))
     for t in saved.get("tasks", []):  # 뒤에서 도는 일은 서버를 다시 띄워도 '진행 중'에 남긴다
         tasks[t["id"]] = t
     for i, it in enumerate(saved.get("items", []), 1):
@@ -104,7 +112,7 @@ def save():
     os.makedirs(os.path.dirname(CHAT), exist_ok=True)
     keep = [dict(i, queued=i in inbox) for i in items][-500:]
     with open(CHAT, "w", encoding="utf-8") as f:
-        json.dump({"items": keep, "tasks": list(tasks.values())}, f, ensure_ascii=False)
+        json.dump({"items": keep, "tasks": list(tasks.values()), "held": held, "my_last": my_last}, f, ensure_ascii=False)
 
 
 def add(kind, **kw):
@@ -171,7 +179,7 @@ class H(BaseHTTPRequestHandler):
             with lock:
                 return self.send(200, {"items": [i for i in items[after:] if not i.get("hidden")], "pending": len(inbox),
                                        "listen_age": round(time.time() - heartbeat[0]) if heartbeat[0] else None,
-                                       "mgit": view["mgit"], "tasks": list(tasks.values()), "status": status,
+                                       "mgit": view["mgit"], "tasks": list(tasks.values()), "status": status, "held": len(held),
                                        "states": {i["id"]: i.get("state", "new") for i in items if i["kind"] in NEWS_KINDS and not i.get("hidden")}})
         self.send(404, {"error": "not found"})
 
@@ -180,7 +188,21 @@ class H(BaseHTTPRequestHandler):
         if self.path == "/api/items":
             if not str(b.get("text") or "").strip():
                 return self.send(400, {"error": "empty"})
-            return self.send(200, add(b.get("kind", "mina"), **{k: b.get(k) for k in ("from", "chat", "text", "mgit", "doc")}))
+            kw = {k: b.get(k) for k in ("from", "chat", "text", "mgit", "doc")}
+            tier = b.get("tier") or "now"
+            if tier in ("hour", "soon"):
+                with lock:
+                    held.append({"release_at": next_hour() if tier == "hour" else time.time() + SOON, "conv": b.get("conv"),
+                                 "at": b.get("at"), "ts": time.strftime("%H:%M:%S"), "kind": b.get("kind", "mina"), "kw": kw})
+                    save()
+                return self.send(200, {"held": True})
+            if tier == "none":
+                kw["state"] = "skip"
+            return self.send(200, add(b.get("kind", "mina"), **kw))
+        if self.path == "/api/my_last":  # 감시꾼: {대화방 id: 내가 마지막으로 보낸 시각}
+            with lock:
+                my_last.update({str(k): str(v) for k, v in b.items()})
+            return self.send(200, {"ok": True})
         if self.path == "/api/say":
             text = str(b.get("text", "")).strip()
             if not text:
@@ -298,6 +320,33 @@ class H(BaseHTTPRequestHandler):
         self.send(404, {"error": "not found"})
 
 
+def next_hour():
+    t = time.localtime()
+    return time.mktime((t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour + 1, 0, 0, 0, 0, -1))
+
+
+def replied(h):
+    """1:1 보류 소식: 그 뒤에 내가 그 방에 답했으면 True."""
+    mine, at = my_last.get(str(h.get("conv") or "")), h.get("at")
+    return bool(mine and at and str(mine) > str(at))
+
+
+def release_loop():
+    """보류 소식을 때가 되면 소식판에 올린다(정시 묶음은 한꺼번에, 1:1 은 내가 이미 답했으면 무시로)."""
+    while True:
+        time.sleep(20)
+        now = time.time()
+        with lock:
+            due = [h for h in held if h["release_at"] <= now]
+            for h in due:
+                held.remove(h)
+        for h in due:
+            kw = dict(h["kw"])
+            if h.get("conv") and replied(h):
+                kw["state"] = "skip"
+            add(h["kind"], **kw)
+
+
 def status_loop():
     """현황 칸: 한 바퀴 1분쯤(GitLab·git) 걸려 서버에서 따로 돈다. 감시꾼은 자주 깨고 다시 떠서 거기선 끝까지 못 돈다."""
     import status as status_board
@@ -317,5 +366,6 @@ if __name__ == "__main__":
     load()
     if config.on("status"):
         threading.Thread(target=status_loop, daemon=True).start()
+    threading.Thread(target=release_loop, daemon=True).start()
     print("secretary on http://127.0.0.1:%d" % PORT, flush=True)
     ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()

@@ -606,6 +606,8 @@ async function poll(first) {
     if (stick && j.items.length) { pinned = true; list.scrollTop = list.scrollHeight; }
     if (first) requestAnimationFrame(() => requestAnimationFrame(() => { pinned = true; toBottom(); }));
     // 서버가 새 mgit 주소를 줄 때만 연다. 첫 로드엔 브라우저에 기억된 주소가 우선
+    // 정시 묶음·1:1 보류 중인 소식 수(아직 소식판에 안 올라온 것) — 사이드바 제목에 툴팁으로만
+    $("sidetoggle").title = "눌러서 접기/펴기" + (j.held ? ` · 다음 정시에 올라올 소식 ${j.held}건` : "");
     if (j.mgit && j.mgit !== serverMgit) { const fresh = !first || !mgitUrl; serverMgit = j.mgit; if (fresh) openMgit(j.mgit, !first); }
     renderTasks(j.tasks || []);
     if (j.status && JSON.stringify(j.status) !== lastStatus) { lastStatus = JSON.stringify(j.status); renderBoard(j.status); lastNeeds = ""; }
