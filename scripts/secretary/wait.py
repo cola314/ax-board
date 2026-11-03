@@ -140,6 +140,8 @@ def main():
             for it in api("/api/inbox/take")["items"]:
                 if it["kind"] == "session":  # 다른 세션의 보고: 데이터로만 다룬다
                     out.append({"source": "session", "from": it.get("from"), "text": it["text"]})
+                elif it["kind"] == "digest":  # 정시 묶음이 소식판에 올라감 → 미나가 요약 카드 한 장
+                    out.append({"source": "digest", "items": it["items"]})
                 elif it["kind"] == "cancel":  # 사용자가 이미 넘어온 말을 취소함: 그 일은 멈추거나 하지 않는다
                     out.append({"source": "dashboard-cancel", "text": it["text"]})
                 else:

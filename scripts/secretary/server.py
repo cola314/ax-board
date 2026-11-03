@@ -340,11 +340,17 @@ def release_loop():
             due = [h for h in held if h["release_at"] <= now]
             for h in due:
                 held.remove(h)
+        shown = []
         for h in due:
             kw = dict(h["kw"])
             if h.get("conv") and replied(h):
                 kw["state"] = "skip"
-            add(h["kind"], **kw)
+            it = add(h["kind"], **kw)
+            if it.get("state") != "skip":
+                shown.append({k: it.get(k) for k in ("id", "from", "chat", "text")})
+        if len(shown) >= 2:  # 정시 묶음: 미나를 깨워 '이번 시간 묶음' 요약 카드를 올리게(한 줄씩 누가·무엇·내 몫)
+            with lock:
+                inbox.append({"kind": "digest", "items": shown})
 
 
 def status_loop():
