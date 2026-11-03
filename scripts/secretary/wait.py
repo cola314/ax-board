@@ -166,9 +166,9 @@ def main():
                 # 깨우기: 내 이름 언급은 바로, 1:1 은 10초 조용해지면, 그룹방은 대화가 잦아들 때 묶어서
                 # 소식판: 이름 언급은 바로, 1:1 은 10분 뒤(그새 내가 답했으면 무시로), 그룹방은 정시 묶음
                 mention = any(n in m["text"] for n in WAKE_NAMES)
-                dm = m["conversation"].endswith("@unq.gbl.spaces")
+                is_dm = m["conversation"].endswith("@unq.gbl.spaces")
                 api("/api/items", {"kind": "teams", "from": m["from"], "chat": m["chat"], "text": m["text"],
-                                   "tier": "now" if mention else "soon" if dm else "hour",
+                                   "tier": "now" if mention else "soon" if is_dm else "hour",
                                    "conv": m["conversation"], "at": m["time"]})
                 seen.add(m["id"])
                 st["seen"] = st.get("seen", []) + [m["id"]]
