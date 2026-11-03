@@ -84,7 +84,7 @@ aside { container-type:inline-size; }
 .mgitview { flex:1; border:0; width:100%; min-height:0; background:#fff; }
 /* 메인 패널 뷰 전환: 현황 / mgit (소식은 왼쪽 사이드바) */
 body:not(.view-status) #board, body:not(.view-mgit) #mgit, body:not(.view-doc) #doc, body:not(.view-rules) #rules { display:none !important; }
-/* 📜 규칙 보기: 단순 도식 3장(소식 길·일감 흐름·승인 필요) + 원문은 접어서. 좁으면 세로로 접힘 */
+/* 📜 규칙 보기: 단순 도식 4장(소식 길+표시 등급·일감 흐름·평소 습관·승인 필요) + 원문은 접어서. 좁으면 세로로 접힘 */
 #rules { flex:1; overflow-y:auto; min-height:0; padding:10px; display:flex; flex-direction:column; gap:10px; container-type:inline-size; }
 .fig { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
 .fig h3 { margin:0 0 8px; font-size:13.5px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
@@ -99,6 +99,14 @@ body:not(.view-status) #board, body:not(.view-mgit) #mgit, body:not(.view-doc) #
 .ar { color:var(--mute); font-size:13px; }
 .fig .bg { margin:6px 0 0 8px; padding-left:10px; border-left:2px dashed var(--line); font-size:12px; color:var(--mute); }
 @container (max-width: 520px) { .fig .fr.v { flex-direction:column; align-items:stretch; } .fig .fr.v > .ar { transform:rotate(90deg); align-self:center; } }
+.fig .sub { margin:10px 0 6px; font-size:12px; color:var(--mute); }
+.tiers { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:6px; }
+.tier { --c:var(--mute); border:1px solid var(--line); border-top:3px solid var(--c); border-radius:8px; padding:6px 8px; background:color-mix(in srgb, var(--c) 9%, var(--panel)); font-size:12px; display:flex; flex-direction:column; gap:3px; min-width:0; }
+.tier b { font-size:12.5px; color:var(--c); }
+.tier i { font-style:normal; color:var(--mute); font-size:11.5px; }
+.tier.t-now { --c:#ef4444; } .tier.t-soon { --c:#f59e0b; } .tier.t-hour { --c:#3b82f6; } .tier.t-none { --c:#8b93a3; }
+@container (max-width: 520px) { .tiers { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+@container (max-width: 300px) { .tiers { grid-template-columns:1fr; } }
 #rules details { font-size:12.5px; color:var(--mute); }
 #rules summary { cursor:pointer; }
 #rules pre { white-space:pre-wrap; word-break:break-word; font-size:11.5px; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:8px; color:var(--fg); }
@@ -270,12 +278,22 @@ form { border-top:0 !important; }
         <span class="ar">→</span><span class="bx key">🧑‍💻 미나</span>
         <span class="ar">→</span><span class="bx">📊 대시보드</span>
       </div>
+      <div class="sub">📋 소식판엔 4등급으로 (깨우기와 별개)</div>
+      <div class="tiers">
+        <div class="tier t-now"><b>🔴 바로</b><span>Teams 이름 멘션</span><span>GitLab 할당·멘션</span><span>세션 보고</span></div>
+        <div class="tier t-soon"><b>🟠 10분 보류</b><span>Teams 1:1</span><i>그새 내가 답하면 무시로</i></div>
+        <div class="tier t-hour"><b>🔵 정시 묶음</b><span>그룹방·일반 메일</span><span>리뷰·승인 요청</span><span>내 MR 머지 가능</span></div>
+        <div class="tier t-none"><b>⚪ 무시</b><span>GitLab 알림 메일</span><span>내 MR 머지됨·닫힘</span><i>전체 필터에서만</i></div>
+      </div>
     </div>
     <div class="fig"><h3>🎯 내 담당 일감</h3>
       <div class="fr v">
         <span class="bx">📥 감지</span><span class="ar">→</span><span class="bx">🔎 원인·알림</span><span class="ar">→</span><span class="bx key">🔧 수정</span><span class="ar">→</span><span class="bx">🧪 관련·API 테스트</span><span class="ar">→</span><span class="bx now">👀 확인</span><span class="ar">→</span><span class="bx key">4 push</span><span class="ar">→</span><span class="bx key">5 MR</span><span class="ar">→</span><span class="bx">✅</span>
       </div>
       <div class="bg">⏳ 전체 테스트는 옆에서 백그라운드 · 실패하면 알림</div>
+    </div>
+    <div class="fig"><h3>🧭 평소 습관</h3>
+      <div class="fr"><span class="bx key">🔙 긴 작업은 뒤에서 · 미나는 대화</span><span class="bx">⏳N 배지 → 뒤에서 도는 일</span><span class="bx">🦊 내 MR 접힘 · 바뀐 것만 🔴</span><span class="bx now">⏰ 정기 점검 11:30·17:00 · 오늘 꼭 할 것</span></div>
     </div>
     <div class="fig"><h3>✋ 내가 꼭 물어보는 것</h3>
       <div class="fr"><span class="bx ask">📨 Teams 전송</span><span class="bx ask">✉️ 메일 전송</span><span class="bx ask">💬 일감 댓글</span><span class="bx ask">⬆️ push·MR (대시보드 4·5)</span><span class="bx ask">⚙️ 설정 변경</span></div>
