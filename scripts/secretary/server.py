@@ -148,6 +148,7 @@ SCROLLBAR_CSS = b"""<style>
 # ── 근무시간(현황판 맨 위 한 줄) ── attendance.json(attendance_set.py 가 저장) + 지금 시각.
 # 규칙은 /attendance 스킬 '핵심 상수': 주 40h, 점심 12-13 1h, 퇴근 19시 넘으면 저녁 19-20 1h, 휴일·연차 8h
 ATT_FILE = os.path.join(os.path.dirname(CHAT), "attendance.json")
+ATT_OVERRIDES = os.path.join(os.path.dirname(ATT_FILE), "attendance_overrides.json")
 LUNCH, DINNER, OFF_DAY = (720, 780), (1140, 1200), 480
 
 
@@ -160,12 +161,12 @@ def _fmt(m):
     return "%02d:%02d" % divmod(int(m), 60)
 
 
-def work_min(start, end):
-    """출근~퇴근(분) 사이 근무 분: 점심 겹침 빼고, 퇴근이 19시를 넘으면 저녁 겹침도 뺀다."""
+def work_min(start, end, dinner=True):
+    """출근~퇴근(분) 사이 근무 분: 점심 겹침 빼고, 퇴근이 19시를 넘으면 저녁 겹침도 뺀다(dinner=False 면 저녁 안 쉰 날)."""
     if end <= start:
         return 0
     w = end - start - max(0, min(end, LUNCH[1]) - max(start, LUNCH[0]))
-    if end > DINNER[0]:
+    if dinner and end > DINNER[0]:
         w -= max(0, min(end, DINNER[1]) - max(start, DINNER[0]))
     return w
 
@@ -188,6 +189,11 @@ def attendance(now=None, data=None, week_hours=None):
         except (OSError, ValueError):
             return None
     goal = int(float(week_hours or config.get("attendance.week_hours") or 40) * 60)
+    try:  # 사용자가 알려 준 예외(예: 저녁 휴게 안 쓰고 일함) {날짜: {"no_dinner": true}} — flex 갱신에 덮이지 않게 따로 둠
+        with open(ATT_OVERRIDES, encoding="utf-8") as f:
+            overrides = json.load(f)
+    except (OSError, ValueError):
+        overrides = {}
     today, now_m = time.strftime("%Y-%m-%d", now), now.tm_hour * 60 + now.tm_min
     rows, before, today_min, days_left, today_in, today_out = [], 0, 0, 0, None, None
     for d in data.get("days") or []:
@@ -195,7 +201,7 @@ def attendance(now=None, data=None, week_hours=None):
         if off:
             m, kind = OFF_DAY, "off"
         elif date < today:
-            m, kind = (work_min(_hm(i), _hm(o)) if i and o else 0), "past"
+            m, kind = (work_min(_hm(i), _hm(o), not (overrides.get(date) or {}).get("no_dinner")) if i and o else 0), "past"
         elif date == today:
             kind, today_in, today_out = "today", i, o
             m = work_min(_hm(i), _hm(o) if o else max(now_m, _hm(i))) if i else 0
