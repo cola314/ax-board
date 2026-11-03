@@ -31,6 +31,7 @@
 .att .line .t { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .att .meter { flex:none; width:90px; height:6px; border-radius:999px; background:var(--line); overflow:hidden; }
 .att .meter i { display:block; height:100%; background:#10b981; }
+.att > .meter { display:block; width:auto; margin:8px 0 6px; }  /* 펼쳤을 때만 보이는 주간 진행 막대 */
 .att .warn { color:#b45309; font-weight:600; }
 @media (prefers-color-scheme: dark) { .att .warn { color:#fbbf24; } }
 .att table { width:100%; border-collapse:collapse; font-size:12px; margin-top:6px; font-variant-numeric:tabular-nums; }
@@ -1019,10 +1020,11 @@ function renderAtt(a) {
   t.title = t.textContent;
   const meter = el("span", "meter"), bar = el("i"); bar.style.width = Math.min(100, a.done / a.goal * 100) + "%"; meter.append(bar);
   meter.title = `${Math.round(a.done / a.goal * 100)}%`;
-  line.append(el("span", null, attOpen ? "▾" : "▸"), t, meter);
+  line.append(el("span", null, attOpen ? "▾" : "▸"), t);  // 막대는 신경 쓰여서 한 줄엔 안 두고 펼쳤을 때만
   line.onclick = () => { attOpen = !attOpen; try { localStorage.setItem("attOpen", attOpen ? "1" : ""); } catch {} renderAtt(a); };
   c.append(line);
   if (attOpen) {
+    c.append(meter);
     const tb = el("table"), hd = el("tr");
     for (const h of ["요일", "날짜", "출근", "퇴근", "근무", ""]) hd.append(el("th", null, h));
     tb.append(hd);
