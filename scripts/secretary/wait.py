@@ -163,6 +163,9 @@ def main():
             if st.get("my_last"):
                 api("/api/my_last", st["my_last"])  # 1:1 보류 소식을 '이미 답함'으로 판정하게 서버에 넘김
             for m in msgs:
+                if not m["text"].strip():  # 이미지만 있는 메시지 등 본문이 비면 서버가 400 → 감시꾼이 죽음
+                    seen.add(m["id"])
+                    continue
                 # 깨우기: 내 이름 언급은 바로, 1:1 은 10초 조용해지면, 그룹방은 대화가 잦아들 때 묶어서
                 # 소식판: 이름 언급은 바로, 1:1 은 10분 뒤(그새 내가 답했으면 무시로), 그룹방은 정시 묶음
                 mention = any(n in m["text"] for n in WAKE_NAMES)
