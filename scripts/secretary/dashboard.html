@@ -102,6 +102,7 @@ aside { container-type:inline-size; }
 .badge { background:#ef4444; color:#fff; border-radius:999px; font-size:10.5px; font-weight:700; padding:0 6px; line-height:16px; }
 #news { flex:1; overflow-y:auto; min-height:0; }
 .mgitview { flex:1; border:0; width:100%; min-height:0; background:#fff; }
+#doc { background:transparent; }  /* 문서 바깥 스크롤바 트랙이 iframe 배경(흰색)을 비춰 다크에서 흰 띠로 보이던 것 */
 /* 메인 패널 뷰 전환: 현황 / mgit (소식은 왼쪽 사이드바) */
 body:not(.view-status) #board, body:not(.view-mgit) #mgit, body:not(.view-doc) #doc, body:not(.view-rules) #rules { display:none !important; }
 /* 📜 규칙 보기: 단순 도식 4장(소식 길+표시 등급·일감 흐름·평소 습관·승인 필요) + 원문은 접어서. 좁으면 세로로 접힘 */
