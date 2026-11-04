@@ -244,6 +244,25 @@ def attendance_cached():
     return _att_cache[1]
 
 
+def with_briefs(st):
+    """👀 리뷰 칸: MR 마다 이미 있는 리뷰 초안(briefs/<이름>.html)을 그때그때 확인해 brief 로 붙인다(수집은 5분마다라)."""
+    rv = st.get("reviews")
+    if not rv or not rv.get("items"):
+        return st
+    try:  # 여러 MR 을 한 장에 묶은 옛 초안 mr-<a>-<b>-review(기본 프로젝트 번호 범위)
+        spans = [(int(x.group(1)), int(x.group(2)), x.group(0)[:-5]) for x in
+                 (re.fullmatch(r"mr-(\d+)-(\d+)-review\.html", f) for f in os.listdir(BRIEFS)) if x]
+    except OSError:
+        spans = []
+
+    def brief(m):
+        names = m.get("briefs", [])
+        hit = next((n for n in names if os.path.exists(os.path.join(BRIEFS, n + ".html"))), None)
+        legacy = names and names[0] == "mr-%s-review" % m.get("iid")
+        return hit or (next((n for a, b, n in spans if a <= int(m["iid"]) <= b), None) if legacy else None)
+    return dict(st, reviews=dict(rv, items=[dict(m, brief=brief(m)) for m in rv["items"]]))
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -294,7 +313,7 @@ class H(BaseHTTPRequestHandler):
             with lock:
                 return self.send(200, {"items": [i for i in items[after:] if not i.get("hidden")], "pending": len(inbox),
                                        "listen_age": round(time.time() - heartbeat[0]) if heartbeat[0] else None,
-                                       "mgit": view["mgit"], "tasks": list(tasks.values()), "status": status, "held": len(held),
+                                       "mgit": view["mgit"], "tasks": list(tasks.values()), "status": with_briefs(status), "held": len(held),
                                        "attendance": attendance_cached(),
                                        "states": {i["id"]: i.get("state", "new") for i in items if i["kind"] in NEWS_KINDS and not i.get("hidden")}})
         self.send(404, {"error": "not found"})
@@ -509,7 +528,7 @@ def status_loop():
     import status as status_board
     while True:
         try:
-            b = status_board.collect()
+            b = status_board.collect(status)
             with lock:
                 status.clear()
                 status.update(b)

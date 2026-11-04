@@ -104,7 +104,7 @@ aside { container-type:inline-size; }
 .mgitview { flex:1; border:0; width:100%; min-height:0; background:#fff; }
 #doc { background:transparent; }  /* 문서 바깥 스크롤바 트랙이 iframe 배경(흰색)을 비춰 다크에서 흰 띠로 보이던 것 */
 /* 메인 패널 뷰 전환: 현황 / mgit (소식은 왼쪽 사이드바) */
-body:not(.view-status) #board, body:not(.view-mgit) #mgit, body:not(.view-doc) #doc, body:not(.view-rules) #rules { display:none !important; }
+body:not(.view-status) #board, body:not(.view-reviews) #reviews, body:not(.view-mgit) #mgit, body:not(.view-doc) #doc, body:not(.view-rules) #rules { display:none !important; }
 /* 📜 규칙 보기: 단순 도식 4장(소식 길+표시 등급·일감 흐름·평소 습관·승인 필요) + 원문은 접어서. 좁으면 세로로 접힘 */
 #rules { flex:1; overflow-y:auto; min-height:0; padding:10px; display:flex; flex-direction:column; gap:10px; container-type:inline-size; }
 .fig { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
@@ -131,7 +131,7 @@ body:not(.view-status) #board, body:not(.view-mgit) #mgit, body:not(.view-doc) #
 #rules details { font-size:12.5px; color:var(--mute); }
 #rules summary { cursor:pointer; }
 #rules pre { white-space:pre-wrap; word-break:break-word; font-size:11.5px; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:8px; color:var(--fg); }
-#board { flex:1; overflow-y:auto; min-height:0; padding:10px; display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:10px; align-content:start; }
+#board, #reviews { flex:1; overflow-y:auto; min-height:0; padding:10px; display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:10px; align-content:start; }
 .card { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:8px 10px; min-width:0; }
 .card h3 { font-size:12.5px; margin:0 0 6px; display:flex; gap:6px; align-items:baseline; }
 .card h3 small { color:var(--mute); font-weight:400; margin-left:auto; }
@@ -145,6 +145,12 @@ body:not(.view-status) #board, body:not(.view-mgit) #mgit, body:not(.view-doc) #
 .chip2 { border-radius:999px; padding:0 7px; font-size:11px; line-height:18px; background:var(--panel); border:1px solid var(--line); color:var(--mute); white-space:nowrap; }
 .chip2.ok { color:#fff; background:#16a34a; border-color:#16a34a; } .chip2.bad { color:#fff; background:#ef4444; border-color:#ef4444; } .chip2.warn { color:#92400e; background:#fef3c7; border-color:#fde68a; }
 .card .none { color:var(--mute); font-size:12px; }
+/* 👀 리뷰 탭: 현황판 카드 한 장(전체 폭), 줄마다 제목·작성자·경과·초안 상태 + 버튼. 좁으면 버튼이 다음 줄로 */
+#reviews .card { grid-column:1 / -1; }
+#reviews .it .r .olinks { margin:0; flex-wrap:nowrap; }
+#reviews .olinks button.has { color:#fff; background:#16a34a; border-color:#16a34a; }
+#reviews .it .who { color:var(--mute); flex:none; max-width:7em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@container (max-width: 560px) { #reviews .it { flex-wrap:wrap; } #reviews .it .t { flex-basis:60%; } #reviews .it .r { margin-left:auto; } }
 .card .more { font-size:11.5px; color:var(--mute); background:none; border:0; padding:4px 0 0; cursor:pointer; font:inherit; }
 .news { padding:8px 14px; border-top:1px solid var(--line); cursor:pointer; }
 .news:hover { background:var(--bg); }
@@ -317,6 +323,7 @@ form { border-top:0 !important; }
   <h2>
     <span class="seg" id="seg">
       <button type="button" class="pbtn" data-v="status" title="현황">📋<span class="lbl"> 현황</span></button>
+      <button type="button" class="pbtn" data-v="reviews" id="revbtn" hidden title="나에게 리뷰 요청 온 열린 MR">👀<span class="lbl"> 리뷰</span> <span id="revn"></span></button>
       <button type="button" class="pbtn" data-v="mgit" id="mgitbtn" hidden title="mgit">🔍<span class="lbl"> mgit</span></button>
       <button type="button" class="pbtn" data-v="doc" id="docbtn" hidden title="문서(변경 설명·준비자료)">📄<span class="lbl"> 문서</span></button>
       <button type="button" class="pbtn" data-v="rules" title="규칙">📜<span class="lbl"> 규칙</span></button>
@@ -324,6 +331,7 @@ form { border-top:0 !important; }
   </h2>
   <div id="pins" hidden></div>
   <div id="board"><div class="none">현황 모으는 중…(최대 1분)</div></div>
+  <div id="reviews"><div class="none">리뷰 요청 모으는 중…(최대 1분)</div></div>
   <div id="rules">
     <div class="fig"><h3>📥 소식이 들어오는 길 <small><span class="bx now">바로 깨움</span><span class="bx lazy">모아서·보드에만</span></small></h3>
       <div class="fr v">
@@ -786,6 +794,7 @@ async function poll(first) {
     renderTasks(j.tasks || []);
     if (JSON.stringify(j.attendance || null) !== lastAtt) { lastAtt = JSON.stringify(j.attendance || null); renderAtt(j.attendance); }
     if (j.status && JSON.stringify(j.status) !== lastStatus) { lastStatus = JSON.stringify(j.status); renderBoard(j.status); lastNeeds = ""; }
+    if (j.status) renderReviews(j.status.reviews, j.tasks || []);
     applyStates(j.states);
     renderNeeds();
     const age = j.listen_age;
@@ -821,8 +830,8 @@ ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height =
 let mgitUrl = "", lastStatus = "";
 // 메인 패널 뷰: status(현황) / mgit
 function setView(v) {
-  if (v !== "mgit" && v !== "doc" && v !== "rules") v = "status";
-  for (const x of ["status", "mgit", "doc", "rules"]) document.body.classList.toggle("view-" + x, x === v);
+  if (v !== "mgit" && v !== "doc" && v !== "rules" && v !== "reviews") v = "status";
+  for (const x of ["status", "reviews", "mgit", "doc", "rules"]) document.body.classList.toggle("view-" + x, x === v);
   if (v === "rules") loadRules();
   for (const b of $("seg").children) b.classList.toggle("on", b.dataset.v === v);
   $("mgit").hidden = v !== "mgit";
@@ -921,7 +930,7 @@ function renderTasks(tk) {
 function card(title, sec, fill, limit) {
   const c = document.createElement("div"); c.className = "card";
   const h = document.createElement("h3"); h.textContent = title;
-  const sm = document.createElement("small"); sm.textContent = sec && sec.at ? sec.at + " 갱신" : ""; h.append(sm); c.append(h);
+  const sm = document.createElement("small"); sm.textContent = sec && sec.at ? sec.at + " 갱신" + (sec.failed ? ` · ${sec.failed}` : "") : ""; h.append(sm); c.append(h);  // failed: 이번 조회 실패, 이전 값 표시 중
   if (!sec) { c.insertAdjacentHTML("beforeend", '<div class="none">모으는 중…</div>'); return c; }
   if (sec.error) { const e = document.createElement("div"); e.className = "none"; e.textContent = sec.error; c.append(e); return c; }
   if (!sec.items.length) { c.insertAdjacentHTML("beforeend", '<div class="none">없음</div>'); return c; }
@@ -988,6 +997,41 @@ function mrCard(sec) {
     renderBoard(lastBoard); lastNeeds = ""; renderNeeds(); renderTaskCard();
   };
   return c;
+}
+// 👀 리뷰 탭: 나에게 리뷰 요청 온 열린 MR(status.reviews, features.review_tab). 초안 📄 있음(briefs 파일)/⏳ 만드는 중(task id·제목)/없음
+// [📄 초안] 문서 탭 · [✍ 초안 만들기]·[🔍 diff] 는 소식 카드 버튼처럼 대시보드 입력으로 미나에게 · [🦊 열기] 크롬
+const REVIEW_ASK = { draft: "이 MR /mr-review 로 리뷰 초안 만들어줘", diff: "이 MR 브랜치 mgit 으로 열어서 대시보드 mgit 탭에 띄워줘" };
+let lastReviews = "";
+function ago(iso) {
+  const h = (Date.now() - new Date(iso)) / 36e5;
+  return [h < 1 ? `${Math.max(1, Math.round(h * 60))}분` : h < 24 ? `${Math.floor(h)}시간` : `${Math.floor(h / 24)}일`, h >= 24];
+}
+function renderReviews(sec, tk) {
+  const on = !!sec;
+  $("revbtn").hidden = !on;
+  if (!on && document.body.classList.contains("view-reviews")) setView("status");
+  const items = (sec && sec.items) || [];
+  const making = m => tk.find(t => t.id === m.task || new RegExp(`!${m.iid}(?!\\d)`).test(`${t.id} ${t.title}`));
+  const sig = JSON.stringify([sec, items.map(m => !!making(m)), new Date().getHours()]);
+  if (sig === lastReviews) return;
+  lastReviews = sig;
+  $("revn").textContent = sec && sec.items ? items.length : "";
+  const c = card(`👀 리뷰 요청 ${items.length}건`, sec, (it, m) => {
+    const [age, old] = ago(m.requested_at), t = making(m);
+    it.append(el("span", "k", "!" + m.iid), titleCell(m.title, m.url), el("span", "who", m.author));
+    const r = el("span", "r");
+    r.append(chip((old ? "⏳ " : "") + age, old ? "warn" : ""));
+    if (t && !m.brief) r.append(chip("⏳ 만드는 중", "warn"));  // 초안 상태: 있음 = 초록 [📄 초안], 없음 = [✍ 초안 만들기] 버튼이 겸함
+    const bs = el("span", "olinks");
+    const ask = q => say(`[🦊 리뷰 요청 · ${m.ref} · ${m.author}] "${m.title}" ${m.url} → ${q}`);
+    const btn = (label, fn, tip) => { const b = el("button", null, label); b.type = "button"; if (tip) b.title = tip; b.onclick = fn; bs.append(b); };
+    if (m.brief) { btn("📄 초안", () => openDoc(location.origin + "/brief/" + m.brief, true), "초안 있음 — 📄 문서 탭에서 열기"); bs.lastChild.className = "has"; }
+    else if (!t) btn("✍ 초안 만들기", () => ask(`${REVIEW_ASK.draft} (초안 파일 briefs/${m.briefs[0]}.html, 작업 id ${m.task})`), "미나에게 리뷰 초안 요청(대시보드 입력)");
+    btn("🔍 diff", () => ask(REVIEW_ASK.diff), "미나에게 mgit 으로 열어 달라고 요청(대시보드 입력)");
+    btn("🦊 열기", () => openGitlab(m.url));
+    r.append(bs); it.append(r);
+  });
+  $("reviews").replaceChildren(c);
 }
 let lastBoard = {};
 function renderBoard(st) {
@@ -1074,7 +1118,7 @@ try {
   const d = localStorage.getItem("docUrl");
   if (d) openDoc(d, false);
   const sv = localStorage.getItem("view");
-  setView(sv === "rules" ? "rules" : sv === "mgit" && !$("mgitbtn").hidden ? "mgit" : sv === "doc" && !$("docbtn").hidden ? "doc" : "status");
+  setView(sv === "rules" || sv === "reviews" ? sv : sv === "mgit" && !$("mgitbtn").hidden ? "mgit" : sv === "doc" && !$("docbtn").hidden ? "doc" : "status");
 } catch { setView("status"); }
 try { if (localStorage.getItem("rail")) rail(true); } catch {}
 $("readall").onclick = () => {

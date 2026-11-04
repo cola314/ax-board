@@ -37,6 +37,33 @@ def my_mrs():
     return out
 
 
+def brief_names(repo, iid):
+    """리뷰 초안 파일 이름 후보(briefs/<이름>.html, 첫 번째가 정식). 기본 프로젝트(news.default_project)는 옛 이름 mr-<iid>-review 도."""
+    names = ["mr-%s-%s-review" % (repo, iid)]
+    return (["mr-%s-review" % iid] + names) if repo == config.get("news.default_project") else names
+
+
+def review_mrs():
+    """나에게 리뷰 요청 온 열린 MR(머지·닫힘은 state=opened 라 자동으로 빠짐). 요청 시각은 reviewers API 의 내 created_at."""
+    import gitlab_watch
+    out = []
+    for mr in gitlab_watch.api("merge_requests?reviewer_username=%s&state=opened&scope=all&per_page=50" % gitlab_watch.ME):
+        pid, iid = mr["project_id"], mr["iid"]
+        ref = mr["references"]["full"]
+        repo = ref.split("!")[0].rsplit("/", 1)[-1]
+        try:
+            me = next((r for r in gitlab_watch.api("projects/%d/merge_requests/%d/reviewers" % (pid, iid))
+                       if (r.get("user") or {}).get("username") == gitlab_watch.ME), {})
+        except Exception:
+            me = {}
+        names = brief_names(repo, iid)
+        legacy = repo == config.get("news.default_project")  # 리뷰 초안 작업 id(task.py): 기본 프로젝트 mr-<iid>, 그 밖 mr-<repo>-<iid>
+        out.append({"title": mr["title"], "ref": ref, "url": mr["web_url"], "repo": repo, "iid": iid,
+                    "author": (mr.get("author") or {}).get("name", ""), "requested_at": me.get("created_at") or mr["created_at"],
+                    "briefs": names, "task": "mr-%s" % iid if legacy else "mr-%s-%s" % (repo, iid)})
+    return sorted(out, key=lambda x: x["requested_at"], reverse=True)
+
+
 def unpushed_branches():
     """sources/* 레포(워크트리는 본 레포로 묶음)에서 원격에 없는 커밋이 있는 내 최근 feature 브랜치."""
     seen, out = set(), []
@@ -91,15 +118,18 @@ def next_meetings(n=3):
     return [{k: e.get(k) for k in ("when", "title", "location", "link")} for e in evs[:n]]
 
 
-def collect():
+def collect(prev=None):
     status = {}
     cells = (("mrs", my_mrs, config.on("gitlab")), ("todo", in_progress, bool(config.get("todo.file"))),
-             ("meetings", next_meetings, config.on("calendar")))
+             ("meetings", next_meetings, config.on("calendar")),
+             ("reviews", review_mrs, config.on("gitlab") and config.on("review_tab")))
     for key, fn, enabled in cells:
         if not enabled:  # 꺼진 기능 칸은 아예 안 보낸다
             continue
         try:
             status[key] = {"items": fn(), "at": time.strftime("%H:%M")}
-        except Exception as e:  # 칸 하나 실패해도 나머지는 채운다
-            status[key] = {"error": "조회 실패: %s" % str(e)[:120], "at": time.strftime("%H:%M")}
+        except Exception as e:  # 칸 하나 실패해도 나머지는 채운다. 이전 값이 있으면 그대로 두고 실패만 표시(GitLab i/o timeout 등)
+            old = (prev or {}).get(key) or {}
+            status[key] = (dict(old, failed="조회 실패 %s" % time.strftime("%H:%M")) if "items" in old
+                           else {"error": "조회 실패: %s" % str(e)[:120], "at": time.strftime("%H:%M")})
     return status
