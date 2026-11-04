@@ -104,7 +104,7 @@ aside { container-type:inline-size; }
 .mgitview { flex:1; border:0; width:100%; min-height:0; background:#fff; }
 #doc { background:transparent; }  /* 문서 바깥 스크롤바 트랙이 iframe 배경(흰색)을 비춰 다크에서 흰 띠로 보이던 것 */
 /* 메인 패널 뷰 전환: 현황 / mgit (소식은 왼쪽 사이드바) */
-body:not(.view-status) #board, body:not(.view-reviews) #reviews, body:not(.view-mgit) #mgit, body:not(.view-doc) #doc, body:not(.view-rules) #rules { display:none !important; }
+body:not(.view-status) #board, body:not(.view-reviews) #reviews, body:not(.view-issues) #issues, body:not(.view-mgit) #mgit, body:not(.view-doc) #doc, body:not(.view-rules) #rules { display:none !important; }
 /* 📜 규칙 보기: 단순 도식 4장(소식 길+표시 등급·일감 흐름·평소 습관·승인 필요) + 원문은 접어서. 좁으면 세로로 접힘 */
 #rules { flex:1; overflow-y:auto; min-height:0; padding:10px; display:flex; flex-direction:column; gap:10px; container-type:inline-size; }
 .fig { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
@@ -131,7 +131,7 @@ body:not(.view-status) #board, body:not(.view-reviews) #reviews, body:not(.view-
 #rules details { font-size:12.5px; color:var(--mute); }
 #rules summary { cursor:pointer; }
 #rules pre { white-space:pre-wrap; word-break:break-word; font-size:11.5px; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:8px; color:var(--fg); }
-#board, #reviews { flex:1; overflow-y:auto; min-height:0; padding:10px; display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:10px; align-content:start; }
+#board, #reviews, #issues { flex:1; overflow-y:auto; min-height:0; padding:10px; display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:10px; align-content:start; }
 .card { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:8px 10px; min-width:0; }
 .card h3 { font-size:12.5px; margin:0 0 6px; display:flex; gap:6px; align-items:baseline; }
 .card h3 small { color:var(--mute); font-weight:400; margin-left:auto; }
@@ -157,6 +157,30 @@ body:not(.view-status) #board, body:not(.view-reviews) #reviews, body:not(.view-
 #reviews .chip2.act { color:#c2410c; background:#ffedd5; border-color:#fdba74; }
 @media (prefers-color-scheme: dark) { #reviews .chip2.act { color:#fdba74; background:#431407; border-color:#9a3412; } }
 @container (max-width: 560px) { #reviews .it { flex-wrap:wrap; } #reviews .it .t { flex-basis:60%; } #reviews .it .r { margin-left:auto; } }
+/* 📌 일감 탭: 리뷰 탭과 같은 한 줄 + 결정 대기면 줄 바로 밑에 결정 한 줄. 손댈 것 없는 일감은 아래 접기 */
+#issues .card { grid-column:1 / -1; }
+#issues .it { flex-wrap:wrap; }
+#issues .it .r .olinks { margin:0; flex-wrap:nowrap; }
+#issues .it .lb { color:var(--mute); font-size:11px; flex:none; max-width:9em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#issues .it .dec { flex-basis:100%; font-size:11.5px; color:#b45309; padding:0 0 1px 2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#issues details.rest { font-size:12.5px; color:var(--mute); border-top:1px solid var(--line); margin-top:4px; padding-top:4px; }
+#issues details.rest > summary { cursor:pointer; padding:2px 0; }
+#issues .it.rest > :not(.r) { opacity:.6; }
+#issues .dd { position:relative; display:inline-block; }
+#issues .olinks > * { flex:none; }
+#issues .dd > summary { list-style:none; cursor:pointer; font-size:11px; line-height:18px; padding:0 8px; border-radius:999px; border:1px solid var(--line); background:var(--panel); color:var(--mute); white-space:nowrap; user-select:none; }
+#issues .dd > summary:hover, #issues .dd[open] > summary { color:var(--fg); border-color:var(--mute); }
+#issues .dd > summary::-webkit-details-marker { display:none; }
+#issues .dd .menu { position:absolute; right:0; top:22px; z-index:20; background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,.25); padding:4px; display:flex; flex-direction:column; min-width:140px; }
+#issues .dd .menu button { border:0; background:none; text-align:left; padding:3px 8px; border-radius:6px; white-space:nowrap; }
+#issues .dd .menu button:hover { background:var(--bg); }
+.chip2.dq { color:#b45309; background:#fef3c7; border-color:#f59e0b; font-weight:700; }
+.chip2.rv { color:#1d4ed8; background:#dbeafe; border-color:#93c5fd; }
+.chip2.dg { color:#b45309; background:#fff7ed; border-color:#fdba74; }
+@media (prefers-color-scheme: dark) { #issues .it .dec { color:#fbbf24; } .chip2.dq { color:#fbbf24; background:#422006; border-color:#a16207; } .chip2.rv { color:#93c5fd; background:#172554; border-color:#1e40af; } .chip2.dg { color:#fdba74; background:#431407; border-color:#9a3412; } }
+@container (max-width: 560px) { #issues .it .t { flex-basis:50%; } #issues .it .lb { display:none; } #issues .it .r { margin-left:auto; max-width:100%; } #issues .it .r, #issues .it .r .olinks { flex-wrap:wrap; justify-content:flex-end; row-gap:3px; } }
+#board .isum { grid-column:1 / -1; cursor:pointer; font-size:12.5px; }
+#board .isum:hover { border-color:var(--mina); }
 .card .more { font-size:11.5px; color:var(--mute); background:none; border:0; padding:4px 0 0; cursor:pointer; font:inherit; }
 .news { padding:8px 14px; border-top:1px solid var(--line); cursor:pointer; }
 .news:hover { background:var(--bg); }
@@ -330,6 +354,7 @@ form { border-top:0 !important; }
     <span class="seg" id="seg">
       <button type="button" class="pbtn" data-v="status" title="현황">📋<span class="lbl"> 현황</span></button>
       <button type="button" class="pbtn" data-v="reviews" id="revbtn" hidden title="나에게 리뷰 요청 온 열린 MR">👀<span class="lbl"> 리뷰</span> <span id="revn"></span></button>
+      <button type="button" class="pbtn" data-v="issues" id="issbtn" hidden title="나에게 할당된 열린 일감 · 숫자 = 결정 대기 + 리뷰 대기">📌<span class="lbl"> 일감</span> <span id="issn"></span></button>
       <button type="button" class="pbtn" data-v="mgit" id="mgitbtn" hidden title="mgit">🔍<span class="lbl"> mgit</span></button>
       <button type="button" class="pbtn" data-v="doc" id="docbtn" hidden title="문서(변경 설명·준비자료)">📄<span class="lbl"> 문서</span></button>
       <button type="button" class="pbtn" data-v="rules" title="규칙">📜<span class="lbl"> 규칙</span></button>
@@ -338,6 +363,7 @@ form { border-top:0 !important; }
   <div id="pins" hidden></div>
   <div id="board"><div class="none">현황 모으는 중…(최대 1분)</div></div>
   <div id="reviews"><div class="none">리뷰 요청 모으는 중…(최대 1분)</div></div>
+  <div id="issues"><div class="none">일감 모으는 중…(최대 2분)</div></div>
   <div id="rules">
     <div class="fig"><h3>📥 소식이 들어오는 길 <small><span class="bx now">바로 깨움</span><span class="bx lazy">모아서·보드에만</span></small></h3>
       <div class="fr v">
@@ -801,6 +827,7 @@ async function poll(first) {
     if (JSON.stringify(j.attendance || null) !== lastAtt) { lastAtt = JSON.stringify(j.attendance || null); renderAtt(j.attendance); }
     if (j.status && JSON.stringify(j.status) !== lastStatus) { lastStatus = JSON.stringify(j.status); renderBoard(j.status); lastNeeds = ""; }
     if (j.status) renderReviews(j.status.reviews, j.tasks || []);
+    if (j.status) renderIssues(j.status.issues);
     applyStates(j.states);
     renderNeeds();
     const age = j.listen_age;
@@ -836,8 +863,8 @@ ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height =
 let mgitUrl = "", lastStatus = "";
 // 메인 패널 뷰: status(현황) / mgit
 function setView(v) {
-  if (v !== "mgit" && v !== "doc" && v !== "rules" && v !== "reviews") v = "status";
-  for (const x of ["status", "reviews", "mgit", "doc", "rules"]) document.body.classList.toggle("view-" + x, x === v);
+  if (v !== "mgit" && v !== "doc" && v !== "rules" && v !== "reviews" && v !== "issues") v = "status";
+  for (const x of ["status", "reviews", "issues", "mgit", "doc", "rules"]) document.body.classList.toggle("view-" + x, x === v);
   if (v === "rules") loadRules();
   for (const b of $("seg").children) b.classList.toggle("on", b.dataset.v === v);
   $("mgit").hidden = v !== "mgit";
@@ -1052,11 +1079,78 @@ function renderReviews(sec, tk) {
   }
   $("reviews").replaceChildren(c);
 }
+// 📌 일감 탭: 나에게 할당된 열린 일감(status.issues, features.issue_tab). 서버(with_issues)가 소식 상태·문서·결정 대기·mgit 을 붙이고 정렬해 줌
+// 상태 칩 = 소식판의 그 일감 키 상태 + ❓ 결정 대기(문서 meta issue-status=decision). 탭 숫자 = 결정 대기 + 리뷰 대기
+const ISTATE = { decision: ["❓ 결정 대기", "dq"], review: ["👀 리뷰 대기", "rv"], doing: ["🔧 작업 중", "dg"], new: ["🆕 새 일감", ""], done: ["✅ 완료", "ok"], skip: ["💤 무시", ""] };
+const ACTIVE = new Set(["decision", "review", "doing", "new"]);
+let lastIssues = "", issRestOpen = false;
+try { issRestOpen = localStorage.getItem("issRestOpen") === "1"; } catch {}
+function issueCounts(items) {
+  const n = s => items.filter(m => m.state === s).length;
+  return { all: items.length, dec: n("decision"), rv: n("review") };
+}
+function issueSummary(sec) {  // 현황판 요약 한 줄 — 누르면 📌 일감 탭
+  if (!sec || !sec.items) return null;
+  const k = issueCounts(sec.items), c = el("div", "card isum");
+  c.textContent = `📌 일감 ${k.all}건` + (k.dec ? ` · ❓결정 ${k.dec}` : "") + (k.rv ? ` · 👀리뷰 ${k.rv}` : "");
+  c.title = "눌러서 📌 일감 탭으로"; c.onclick = () => setView("issues");
+  return c;
+}
+function renderIssues(sec) {
+  const on = !!sec;
+  $("issbtn").hidden = !on;
+  if (!on && document.body.classList.contains("view-issues")) setView("status");
+  const sig = JSON.stringify([sec, new Date().getHours()]);
+  if (sig === lastIssues) return;
+  lastIssues = sig;
+  const items = (sec && sec.items) || [], k = issueCounts(items);
+  $("issn").textContent = (k.dec + k.rv) || "";
+  const act = items.filter(m => ACTIVE.has(m.state)), rest = items.filter(m => !ACTIVE.has(m.state));
+  const c = card(`📌 내 일감 ${items.length}건` + (k.dec ? ` · ❓결정 ${k.dec}` : "") + (k.rv ? ` · 👀리뷰 ${k.rv}` : ""),
+    sec && sec.items ? { ...sec, items: [...act, ...rest] } : sec, (it, m) => {
+    const [age, old] = ago(m.assigned_at), fresh = m.state === "new";
+    if (!ACTIVE.has(m.state)) it.classList.add("rest");
+    it.append(el("span", "k", strip(m.key, UI.key_strip)), titleCell(m.title, m.url));
+    if (m.labels && m.labels.length) { const lb = el("span", "lb", m.labels.join(" · ")); lb.title = m.labels.join("\n"); it.append(lb); }
+    const r = el("span", "r");
+    if (m.priority) r.append(chip(m.priority, ["A", "1", "P1", "높음"].includes(m.priority) ? "bad" : ""));
+    if (m.due) {
+      const left = Math.ceil((new Date(m.due + "T23:59:59") - Date.now()) / 864e5);
+      r.append(chip("📅 " + m.due.slice(5).replace("-", "/"), left < 0 ? "bad" : left <= 2 ? "warn" : ""));
+    }
+    const s = ISTATE[m.state]; if (s) r.append(chip(s[0], s[1]));
+    r.append(chip((old && fresh ? "⏳ " : "") + age, old && fresh ? "warn" : ""));  // 받은 뒤 경과(새 일감이 1일 넘게 묵으면 노랑)
+    const bs = el("span", "olinks");
+    const btn = (label, fn, tip, parent) => { const b = el("button", null, label); b.type = "button"; if (tip) b.title = tip; b.onclick = e => { e.stopPropagation(); fn(); }; (parent || bs).append(b); return b; };
+    const docUrl = n => location.origin + "/brief/" + n, docs = m.docs || [];
+    if (docs.length === 1) btn("📝 문서", () => openDoc(docUrl(docs[0]), true), docs[0] + " — 📄 문서 탭에서 열기");
+    else if (docs.length > 1) {  // 여러 개면 작은 펼침 메뉴(이름에서 번호 접두는 뺌)
+      const dd = el("details", "dd"), sm = el("summary", null, `📝 문서 ${docs.length} ▾`), menu = el("div", "menu");
+      sm.title = docs.join("\n");
+      for (const n of docs) btn(n.replace(new RegExp(`^(${m.repo}-)?${m.iid}-`), ""), () => { dd.open = false; openDoc(docUrl(n), true); }, n, menu);
+      dd.append(sm, menu); bs.append(dd);
+    }
+    if (m.mgit) btn("🔍 mgit", () => openMgit(m.mgit, true), m.mgit);
+    btn("🦊 열기", () => openGitlab(m.url));
+    r.append(bs); it.append(r);
+    if (m.decision) { const d = el("div", "dec", "❓ " + m.decision); d.title = m.decision; it.append(d); }  // 문서 안 열어도 무엇을 정해야 하는지
+  });
+  if (rest.length) {
+    const d = el("details", "rest");
+    d.open = issRestOpen;
+    d.append(el("summary", null, `그 밖 ${rest.length}건 (완료·무시·소식 없음)`), ...c.querySelectorAll(".it.rest"));
+    d.ontoggle = () => { issRestOpen = d.open; try { localStorage.setItem("issRestOpen", d.open ? "1" : ""); } catch {} };
+    c.append(d);
+  }
+  $("issues").replaceChildren(c);
+}
+document.addEventListener("click", e => { for (const d of document.querySelectorAll("#issues .dd[open]")) if (!d.contains(e.target)) d.open = false; });
 let lastBoard = {};
 function renderBoard(st) {
   lastBoard = st;
   const b = $("board"); b.innerHTML = "";
   if (attCard) b.append(attCard);
+  const is = issueSummary(st.issues); if (is) b.append(is);
   b.append(mrCard(st.mrs));
   b.append(card("🔥 진행 중", st.todo, (it, t) => it.append(titleCell(String(t).split(" — ")[0]))));
   b.append(card("📅 다음 회의", st.meetings, (it, e) => {
@@ -1137,7 +1231,7 @@ try {
   const d = localStorage.getItem("docUrl");
   if (d) openDoc(d, false);
   const sv = localStorage.getItem("view");
-  setView(sv === "rules" || sv === "reviews" ? sv : sv === "mgit" && !$("mgitbtn").hidden ? "mgit" : sv === "doc" && !$("docbtn").hidden ? "doc" : "status");
+  setView(sv === "rules" || sv === "reviews" || sv === "issues" ? sv : sv === "mgit" && !$("mgitbtn").hidden ? "mgit" : sv === "doc" && !$("docbtn").hidden ? "doc" : "status");
 } catch { setView("status"); }
 try { if (localStorage.getItem("rail")) rail(true); } catch {}
 $("readall").onclick = () => {

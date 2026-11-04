@@ -1,7 +1,7 @@
 """미나 비서 대시보드 우체통 서버. 내용은 메모리에만 둔다(재시작하면 비워짐).
 
   GET  /                  대시보드
-  GET  /api/items?after=N 카드 목록(+ attendance: 이번 주 근무시간 요약, features.attendance)
+  GET  /api/items?after=N 카드 목록(+ attendance: 이번 주 근무시간 요약, features.attendance / status: 현황·리뷰·일감 칸)
   GET  /api/config        대시보드 화면용 설정(config dashboard 절 + 사용자 이름)
   GET  /brief/<이름>      회의 준비자료 HTML(artifacts/secretary/briefs/<이름>.html)
   GET  /api/rules         운영 규칙 마크다운(config rules.file) — 대시보드 📜 규칙 보기
@@ -283,6 +283,49 @@ def with_briefs(st):
     return dict(st, reviews=dict(rv, items=[with_meta(m, brief(m)) for m in rv["items"]]))
 
 
+ISSUE_ORDER = {"decision": 0, "review": 1, "doing": 2, "new": 3}  # 📌 일감 탭 정렬(그 밖은 4), 같은 그룹은 최근 할당순
+
+
+def issue_docs(repo, iid, files):
+    """일감 문서: 기본 프로젝트는 briefs/<번호>-*.html, 그 밖(또는 기본 프로젝트도)은 <repo>-<번호>-*.html."""
+    pre = ["%s-%s-" % (repo, iid)] + (["%s-" % iid] if repo == DEFAULT_PROJECT else [])
+    return sorted(f[:-5] for f in files if f.endswith(".html") and any(f.startswith(p) for p in pre))
+
+
+def with_issues(st):
+    """📌 일감 칸: 일감마다 소식 상태(같은 키 최신 소식), 문서(briefs), 결정 대기(문서 meta issue-status=decision), mgit 주소를 붙이고 정렬.
+    호출하는 쪽이 lock 을 잡고 있다(items 를 읽음)."""
+    iss = st.get("issues")
+    if not iss or not iss.get("items"):
+        return st
+    try:
+        files = os.listdir(BRIEFS)
+    except OSError:
+        files = []
+    state, mgit_key, mgit_num = {}, {}, {}
+    for i in items:  # 뒤 것이 최신
+        if i["kind"] in NEWS_KINDS and i.get("key"):
+            state[i["key"]] = i.get("state", "new")
+        mg = i.get("mgit") or ""
+        if mg and "/brief/" not in mg:  # 소식 카드에 붙은 mgit 주소(대시보드 rememberMgit 과 같은 규칙: 키 또는 본문의 #번호)
+            if i.get("key"):
+                mgit_key[i["key"]] = mg
+            for n in re.findall(r"#(\d+)\b", str(i.get("text") or "")):
+                mgit_num[n] = mg
+    out = []
+    for m in iss["items"]:
+        key, num = "%s#%s" % (m["repo"], m["iid"]), str(m["iid"])
+        docs = issue_docs(m["repo"], m["iid"], files)
+        decision = next((meta.get("issue-decision") or "결정 필요" for meta in map(brief_meta, docs)
+                         if meta.get("issue-status") == "decision"), "")
+        st_ = "decision" if decision else state.get(key, "")
+        out.append(dict(m, key=key, state=st_, decision=decision, docs=docs,
+                        mgit=mgit_key.get(key) or (mgit_num.get(num) if m["repo"] == DEFAULT_PROJECT else "") or ""))
+    out.sort(key=lambda x: x.get("assigned_at") or "", reverse=True)
+    out.sort(key=lambda x: ISSUE_ORDER.get(x["state"], 4))
+    return dict(st, issues=dict(iss, items=out))
+
+
 _meta_cache = {}  # 초안 이름 → (mtime, {meta 이름: 값}) — 바뀐 파일만 다시 읽는다
 
 
@@ -294,7 +337,7 @@ def brief_meta(name):
             with open(path, encoding="utf-8", errors="replace") as f:
                 head = f.read(20000)
             _meta_cache[name] = (mt, {k: html_unescape(v) for k, v in
-                                      re.findall(r'<meta\s+name="(review-[\w-]+)"\s+content="([^"]*)"', head)})
+                                      re.findall(r'<meta\s+name="((?:review|issue)-[\w-]+)"\s+content="([^"]*)"', head)})
         return _meta_cache[name][1]
     except OSError:
         return {}
@@ -350,7 +393,7 @@ class H(BaseHTTPRequestHandler):
             with lock:
                 return self.send(200, {"items": [i for i in items[after:] if not i.get("hidden")], "pending": len(inbox),
                                        "listen_age": round(time.time() - heartbeat[0]) if heartbeat[0] else None,
-                                       "mgit": view["mgit"], "tasks": list(tasks.values()), "status": with_briefs(status), "held": len(held),
+                                       "mgit": view["mgit"], "tasks": list(tasks.values()), "status": with_issues(with_briefs(status)), "held": len(held),
                                        "attendance": attendance_cached(),
                                        "states": {i["id"]: i.get("state", "new") for i in items if i["kind"] in NEWS_KINDS and not i.get("hidden")}})
         self.send(404, {"error": "not found"})

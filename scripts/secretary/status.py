@@ -1,4 +1,4 @@
-"""대시보드 '현황' 칸 데이터: 내 MR, push 안 한 로컬 브랜치, 진행 중 일, 다음 회의.
+"""대시보드 '현황' 칸 데이터: 내 MR, push 안 한 로컬 브랜치, 진행 중 일, 다음 회의, 리뷰 요청 MR, 내 일감.
 
 server.py 의 status_loop 스레드가 5분마다 collect() 를 불러 현황 칸을 채운다. 칸마다 실패해도 나머지는 채운다.
 """
@@ -78,6 +78,48 @@ def review_mrs():
     return sorted(out, key=lambda x: x["requested_at"], reverse=True)
 
 
+_assigned = {}  # 일감 id → (updated_at, 내가 할당된 시각) — 일감이 안 바뀌었으면 notes 를 다시 안 부른다
+
+
+def assigned_at(issue):
+    """내가 할당된 시각: 시스템 노트 'assigned to @<me>' 중 최근 것. 못 찾으면 일감 생성 시각."""
+    import gitlab_watch
+    hit = _assigned.get(issue["id"])
+    if hit and hit[0] == issue["updated_at"]:
+        return hit[1]
+    at = issue["created_at"]
+    try:
+        for n in gitlab_watch.api("projects/%d/issues/%d/notes?sort=desc&order_by=created_at&per_page=50"
+                                  % (issue["project_id"], issue["iid"])):
+            if n.get("system") and re.search(r"\bassigned to .*@%s\b" % re.escape(gitlab_watch.ME), n.get("body") or ""):
+                at = n["created_at"]
+                break
+    except Exception:
+        return at  # 다음 바퀴에 다시
+    _assigned[issue["id"]] = (issue["updated_at"], at)
+    return at
+
+
+def my_issues():
+    """나에게 할당된 열린 일감(issues/work items). 우선순위는 issue_tab.priority_label 정규식(그룹 1)에 맞는 라벨."""
+    import gitlab_watch
+    prio = re.compile(config.get("issue_tab.priority_label") or r"^(?:우선순위|priority)::(.+)$", re.I)
+    out = []
+    for page in range(1, 6):
+        batch = gitlab_watch.api("issues?assignee_username=%s&state=opened&scope=all&per_page=100&page=%d" % (gitlab_watch.ME, page))
+        for i in batch:
+            ref = i["references"]["full"]
+            labels = i.get("labels") or []
+            p = next((m.group(1) for m in map(prio.match, labels) if m), "")
+            out.append({"title": i["title"], "ref": ref, "url": i["web_url"], "repo": ref.split("#")[0].rsplit("/", 1)[-1],
+                        "iid": i["iid"], "priority": p, "labels": [x for x in labels if not prio.match(x)],
+                        "due": i.get("due_date") or "", "type": i.get("issue_type") or "issue",
+                        "assigned_at": assigned_at(i), "updated_at": i["updated_at"]})
+        if len(batch) < 100:
+            break
+    return out
+
+
 def unpushed_branches():
     """sources/* 레포(워크트리는 본 레포로 묶음)에서 원격에 없는 커밋이 있는 내 최근 feature 브랜치."""
     seen, out = set(), []
@@ -136,7 +178,8 @@ def collect(prev=None):
     status = {}
     cells = (("mrs", my_mrs, config.on("gitlab")), ("todo", in_progress, bool(config.get("todo.file"))),
              ("meetings", next_meetings, config.on("calendar")),
-             ("reviews", review_mrs, config.on("gitlab") and config.on("review_tab")))
+             ("reviews", review_mrs, config.on("gitlab") and config.on("review_tab")),
+             ("issues", my_issues, config.on("gitlab") and config.on("issue_tab")))
     for key, fn, enabled in cells:
         if not enabled:  # 꺼진 기능 칸은 아예 안 보낸다
             continue
