@@ -44,11 +44,21 @@ def brief_names(repo, iid):
 
 
 def review_mrs():
-    """나에게 리뷰 요청 온 열린 MR(머지·닫힘은 state=opened 라 자동으로 빠짐). 요청 시각은 reviewers API 의 내 created_at."""
+    """나에게 리뷰 요청 온 열린 MR(머지·닫힘은 state=opened 라 자동으로 빠짐). 요청 시각은 reviewers API 의 내 created_at.
+    내가 이미 승인한 MR, review_tab.max_age_days(기본 30일) 넘게 갱신 없는 MR 은 뺀다."""
     import gitlab_watch
     out = []
+    cutoff = datetime.now().astimezone().timestamp() - (config.get("review_tab.max_age_days") or 30) * 86400
     for mr in gitlab_watch.api("merge_requests?reviewer_username=%s&state=opened&scope=all&per_page=50" % gitlab_watch.ME):
         pid, iid = mr["project_id"], mr["iid"]
+        if datetime.fromisoformat(mr["updated_at"].replace("Z", "+00:00")).timestamp() < cutoff:
+            continue
+        try:
+            appr = gitlab_watch.api("projects/%d/merge_requests/%d/approvals" % (pid, iid))
+            if any((a.get("user") or {}).get("username") == gitlab_watch.ME for a in appr.get("approved_by") or []):
+                continue
+        except Exception:
+            pass
         ref = mr["references"]["full"]
         repo = ref.split("!")[0].rsplit("/", 1)[-1]
         try:
