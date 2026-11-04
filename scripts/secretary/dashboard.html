@@ -1145,7 +1145,7 @@ function applyCleared() {
   if (list.firstChild !== bar) list.prepend(bar);
 }
 $("chatclear").onclick = () => {
-  if (!last || !confirm("지금까지의 대화를 화면에서 지울까요? (기록은 남고 [보기]로 되돌릴 수 있어요)")) return;
+  if (!last) return;
   clearedAt = last; try { localStorage.setItem("chatClearedAt", String(last)); } catch {}
   applyCleared();
 };
