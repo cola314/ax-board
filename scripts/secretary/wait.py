@@ -55,11 +55,11 @@ def api(path, body=None):
 
 
 def gitlab_tier(g):
-    """GitLab 소식 표시 등급: 내 일감 할당·멘션은 바로, 리뷰 요청·내 MR 머지 가능은 정시 묶음, 머지됨·닫힘은 무시로."""
+    """GitLab 소식 표시 등급: 할당·멘션·리뷰 요청·내 MR 머지 가능은 정시 묶음, 머지됨·닫힘은 무시로."""
     t = str(g.get("text") or "")
     if g.get("from") == "내 MR":
         return "hour" if t.startswith("승인 다 참") else "none"
-    return "hour" if t.startswith(("리뷰 요청", "승인 요청")) else "now"
+    return "hour"
 
 
 def review_slot(now, times, done, grace=2):
