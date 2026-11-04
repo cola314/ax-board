@@ -115,6 +115,8 @@ def my_issues():
         batch = gitlab_watch.api("issues?assignee_username=%s&state=opened&scope=all&per_page=100&page=%d" % (gitlab_watch.ME, page))
         for i in batch:
             ref = i["references"]["full"]
+            if ref.split("#")[0] in (config.get("issue_tab.exclude_projects") or []):
+                continue
             repo = ref.split("#")[0].rsplit("/", 1)[-1]
             state, docs = info(repo, i["iid"])
             if (datetime.fromisoformat(i["updated_at"].replace("Z", "+00:00")).timestamp() < cutoff
