@@ -150,6 +150,12 @@ body:not(.view-status) #board, body:not(.view-reviews) #reviews, body:not(.view-
 #reviews .it .r .olinks { margin:0; flex-wrap:nowrap; }
 #reviews .olinks button.has { color:#fff; background:#16a34a; border-color:#16a34a; }
 #reviews .it .who { color:var(--mute); flex:none; max-width:7em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* 승인 다 찬 MR: 아래 접기 안에 회색 줄. ⚠ 남길 말 칩은 그대로 진하게 */
+#reviews details { font-size:12.5px; color:var(--mute); border-top:1px solid var(--line); margin-top:4px; padding-top:4px; }
+#reviews summary { cursor:pointer; padding:2px 0; }
+#reviews .it.done > :not(.r), #reviews .it.done .r > :not(.act):not(.olinks) { opacity:.5; }
+#reviews .chip2.act { color:#c2410c; background:#ffedd5; border-color:#fdba74; }
+@media (prefers-color-scheme: dark) { #reviews .chip2.act { color:#fdba74; background:#431407; border-color:#9a3412; } }
 @container (max-width: 560px) { #reviews .it { flex-wrap:wrap; } #reviews .it .t { flex-basis:60%; } #reviews .it .r { margin-left:auto; } }
 .card .more { font-size:11.5px; color:var(--mute); background:none; border:0; padding:4px 0 0; cursor:pointer; font:inherit; }
 .news { padding:8px 14px; border-top:1px solid var(--line); cursor:pointer; }
@@ -1001,7 +1007,8 @@ function mrCard(sec) {
 // 👀 리뷰 탭: 나에게 리뷰 요청 온 열린 MR(status.reviews, features.review_tab). 초안 📄 있음(briefs 파일)/⏳ 만드는 중(task id·제목)/없음
 // [📄 초안] 문서 탭 · [✍ 초안 만들기]·[🔍 diff] 는 소식 카드 버튼처럼 대시보드 입력으로 미나에게 · [🦊 열기] 크롬
 const REVIEW_ASK = { draft: "이 MR /mr-review 로 리뷰 초안 만들어줘", diff: "이 MR 브랜치 mgit 으로 열어서 대시보드 mgit 탭에 띄워줘" };
-let lastReviews = "";
+let lastReviews = "", revDoneOpen = false;
+try { revDoneOpen = localStorage.getItem("revDoneOpen") === "1"; } catch {}
 function ago(iso) {
   const h = (Date.now() - new Date(iso)) / 36e5;
   return [h < 1 ? `${Math.max(1, Math.round(h * 60))}분` : h < 24 ? `${Math.floor(h)}시간` : `${Math.floor(h / 24)}일`, h >= 24];
@@ -1015,11 +1022,16 @@ function renderReviews(sec, tk) {
   const sig = JSON.stringify([sec, items.map(m => !!making(m)), new Date().getHours()]);
   if (sig === lastReviews) return;
   lastReviews = sig;
-  $("revn").textContent = sec && sec.items ? items.length : "";
-  const c = card(`👀 리뷰 요청 ${items.length}건`, sec, (it, m) => {
+  const todo = items.filter(m => !m.approved_all), done = items.filter(m => m.approved_all);  // 승인 다 찬 것은 아래 접기
+  $("revn").textContent = todo.length || "";
+  const c = card(`👀 리뷰 요청 ${todo.length}건`, sec && sec.items ? { ...sec, items: [...todo, ...done] } : sec, (it, m) => {
     const [age, old] = ago(m.requested_at), t = making(m);
+    if (m.approved_all) it.classList.add("done");
     it.append(el("span", "k", "!" + m.iid), titleCell(m.title, m.url), el("span", "who", m.author));
     const r = el("span", "r");
+    if (m.approved_all) r.append(chip("✓" + m.approvals));
+    if (m.verdict === "action") r.append(chip("⚠ " + (m.summary || "남길 말 있음"), "act"));  // 초안 결론(meta review-verdict/summary)
+    else if (m.verdict === "ok") r.append(chip("✓ 코멘트 없음", "ok"));
     r.append(chip((old ? "⏳ " : "") + age, old ? "warn" : ""));
     if (t && !m.brief) r.append(chip("⏳ 만드는 중", "warn"));  // 초안 상태: 있음 = 초록 [📄 초안], 없음 = [✍ 초안 만들기] 버튼이 겸함
     const bs = el("span", "olinks");
@@ -1031,6 +1043,13 @@ function renderReviews(sec, tk) {
     btn("🦊 열기", () => openGitlab(m.url));
     r.append(bs); it.append(r);
   });
+  if (done.length) {
+    const d = el("details"), acts = done.filter(m => m.verdict === "action").length;
+    d.open = revDoneOpen;
+    d.append(el("summary", null, `✓ 승인 다 참 ${done.length}건` + (acts ? ` · ⚠ ${acts}건 남길 말 있음` : "")), ...c.querySelectorAll(".it.done"));
+    d.ontoggle = () => { revDoneOpen = d.open; try { localStorage.setItem("revDoneOpen", d.open ? "1" : ""); } catch {} };
+    c.append(d);
+  }
   $("reviews").replaceChildren(c);
 }
 let lastBoard = {};

@@ -28,6 +28,7 @@ import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from html import unescape as html_unescape
 from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -143,6 +144,19 @@ SCROLLBAR_CSS = b"""<style>
 ::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--muted,var(--mute,#8b93a3)) 65%,transparent);background-clip:padding-box}
 ::-webkit-scrollbar-button{display:none;width:0;height:0}
 </style>"""
+# 준비자료 코드 블록 구문 강조(highlight.js, 라이트 github / 다크 github-dark). 대상: pre>code, 언어 클래스 없는 pre(자동 감지),
+# +/- 줄만 있으면 diff. 이미 span 등으로 꾸민 블록은 그대로. 오프라인이면 스크립트만 실패하고 문서는 원래대로.
+HLJS = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/"
+HIGHLIGHT = (r"""<link rel="stylesheet" media="(prefers-color-scheme: light)" href="%(u)sstyles/github.min.css">
+<link rel="stylesheet" media="(prefers-color-scheme: dark)" href="%(u)sstyles/github-dark.min.css">
+<style>.hljs{background:transparent!important}pre code.hljs{padding:0}</style>
+<script src="%(u)shighlight.min.js" defer></script>
+<script>addEventListener("DOMContentLoaded",function(){var h=window.hljs;if(!h)return;
+h.configure({languages:["java","kotlin","sql","bash","yaml","json","xml","javascript","typescript","python","ini","diff"]});  // 자동 감지 후보(로그가 swift·go 로 잡히는 것 방지)
+document.querySelectorAll("pre").forEach(function(p){var e=p.querySelector(":scope>code")||p;if(e.children.length||/\bnohighlight\b/.test(e.className))return;
+var l=e.textContent.split("\n").filter(function(x){return x.trim()});
+if(!/\blang(uage)?-/.test(e.className)&&l.length&&l.every(function(x){return /^([+\- ]|@@)/.test(x)})&&l.some(function(x){return /^[+-]/.test(x)}))e.classList.add("language-diff");
+try{h.highlightElement(e)}catch(_){}});});</script>""" % {"u": HLJS}).encode()
 
 
 # ── 근무시간(현황판 맨 위 한 줄) ── attendance.json(attendance_set.py 가 저장) + 지금 시각.
@@ -260,7 +274,30 @@ def with_briefs(st):
         hit = next((n for n in names if os.path.exists(os.path.join(BRIEFS, n + ".html"))), None)
         legacy = names and names[0] == "mr-%s-review" % m.get("iid")
         return hit or (next((n for a, b, n in spans if a <= int(m["iid"]) <= b), None) if legacy else None)
-    return dict(st, reviews=dict(rv, items=[dict(m, brief=brief(m)) for m in rv["items"]]))
+
+    def with_meta(m, name):  # 초안 결론: <meta name="review-verdict[-<iid>]" content="action|ok"> · review-summary[-<iid>]
+        meta = brief_meta(name) if name else {}
+        sfx = "-%s" % m.get("iid")
+        return dict(m, brief=name, verdict=meta.get("review-verdict" + sfx) or meta.get("review-verdict"),
+                    summary=meta.get("review-summary" + sfx) or meta.get("review-summary"))
+    return dict(st, reviews=dict(rv, items=[with_meta(m, brief(m)) for m in rv["items"]]))
+
+
+_meta_cache = {}  # 초안 이름 → (mtime, {meta 이름: 값}) — 바뀐 파일만 다시 읽는다
+
+
+def brief_meta(name):
+    path = os.path.join(BRIEFS, name + ".html")
+    try:
+        mt = os.path.getmtime(path)
+        if _meta_cache.get(name, (None,))[0] != mt:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                head = f.read(20000)
+            _meta_cache[name] = (mt, {k: html_unescape(v) for k, v in
+                                      re.findall(r'<meta\s+name="(review-[\w-]+)"\s+content="([^"]*)"', head)})
+        return _meta_cache[name][1]
+    except OSError:
+        return {}
 
 
 class H(BaseHTTPRequestHandler):
@@ -304,7 +341,7 @@ class H(BaseHTTPRequestHandler):
                 with open(os.path.join(BRIEFS, name + ".html"), "rb") as f:
                     html = f.read()
                 i = html.lower().rfind(b"</head>")  # 스크롤바 공통 스타일 주입 — 문서마다 넣지 않아도 대시보드와 같게
-                html = html[:i] + SCROLLBAR_CSS + html[i:] if i >= 0 else SCROLLBAR_CSS + html
+                html = html[:i] + SCROLLBAR_CSS + HIGHLIGHT + html[i:] if i >= 0 else SCROLLBAR_CSS + HIGHLIGHT + html
                 return self.send(200, html, "text/html; charset=utf-8")
             except OSError:
                 return self.send(404, {"error": "no brief"})

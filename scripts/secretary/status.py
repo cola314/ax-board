@@ -45,7 +45,7 @@ def brief_names(repo, iid):
 
 def review_mrs():
     """나에게 리뷰 요청 온 열린 MR(머지·닫힘은 state=opened 라 자동으로 빠짐). 요청 시각은 reviewers API 의 내 created_at.
-    내가 이미 승인한 MR, review_tab.max_age_days(기본 30일) 넘게 갱신 없는 MR 은 뺀다."""
+    내가 이미 승인한 MR, review_tab.max_age_days(기본 30일) 넘게 갱신 없는 MR 은 뺀다. 승인 다 찬 MR 은 approved_all 로 표시."""
     import gitlab_watch
     out = []
     cutoff = datetime.now().astimezone().timestamp() - (config.get("review_tab.max_age_days") or 30) * 86400
@@ -53,12 +53,14 @@ def review_mrs():
         pid, iid = mr["project_id"], mr["iid"]
         if datetime.fromisoformat(mr["updated_at"].replace("Z", "+00:00")).timestamp() < cutoff:
             continue
+        appr = {}
         try:
             appr = gitlab_watch.api("projects/%d/merge_requests/%d/approvals" % (pid, iid))
             if any((a.get("user") or {}).get("username") == gitlab_watch.ME for a in appr.get("approved_by") or []):
                 continue
         except Exception:
             pass
+        n_by, need = len(appr.get("approved_by") or []), appr.get("approvals_required") or 0
         ref = mr["references"]["full"]
         repo = ref.split("!")[0].rsplit("/", 1)[-1]
         try:
@@ -70,7 +72,9 @@ def review_mrs():
         legacy = repo == config.get("news.default_project")  # 리뷰 초안 작업 id(task.py): 기본 프로젝트 mr-<iid>, 그 밖 mr-<repo>-<iid>
         out.append({"title": mr["title"], "ref": ref, "url": mr["web_url"], "repo": repo, "iid": iid,
                     "author": (mr.get("author") or {}).get("name", ""), "requested_at": me.get("created_at") or mr["created_at"],
-                    "briefs": names, "task": "mr-%s" % iid if legacy else "mr-%s-%s" % (repo, iid)})
+                    "briefs": names, "task": "mr-%s" % iid if legacy else "mr-%s-%s" % (repo, iid),
+                    "approved_all": bool(appr.get("approved") or (need and n_by >= need)),  # 필요한 승인 다 참 → 대시보드에서 회색으로 아래 접음
+                    "approvals": "%d/%d" % (n_by, need) if appr else ""})
     return sorted(out, key=lambda x: x["requested_at"], reverse=True)
 
 
