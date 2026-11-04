@@ -1,7 +1,8 @@
 """대시보드 '현황' 칸 데이터: 내 MR, push 안 한 로컬 브랜치, 진행 중 일, 다음 회의, 리뷰 요청 MR, 내 일감.
 
-server.py 의 status_loop 스레드가 5분마다 collect() 를 불러 현황 칸을 채운다. 칸마다 실패해도 나머지는 채운다.
+server.py 의 status_loop 스레드가 5분마다 collect() 를 불러 현황 칸을 채운다. 칸은 동시에 돌고 끝나는 대로 반영, 하나 실패해도 나머지는 채운다.
 """
+from concurrent.futures import ThreadPoolExecutor
 import os
 import re
 import subprocess
@@ -78,7 +79,8 @@ def review_mrs():
     return sorted(out, key=lambda x: x["requested_at"], reverse=True)
 
 
-_assigned = {}  # 일감 id → (updated_at, 내가 할당된 시각) — 일감이 안 바뀌었으면 notes 를 다시 안 부른다
+_assigned = {}  # 일감 id → (updated_at, 내가 할당된 시각) — 일감이 안 바뀌었으면 notes 를 다시 안 부른다(server 가 디스크에 저장)
+issue_info = None  # server 가 넣음: () → f(repo, iid) = (소식 상태, 문서 있음). 없으면 전부 ("", False)
 
 
 def assigned_at(issue):
@@ -101,20 +103,30 @@ def assigned_at(issue):
 
 
 def my_issues():
-    """나에게 할당된 열린 일감(issues/work items). 우선순위는 issue_tab.priority_label 정규식(그룹 1)에 맞는 라벨."""
+    """나에게 할당된 열린 일감(issues/work items). 우선순위는 issue_tab.priority_label 정규식(그룹 1)에 맞는 라벨.
+    issue_tab.max_age_days(기본 60일) 넘게 갱신 없는 일감은 뺀다(소식 doing/review·문서 있는 일감은 남김).
+    할당 시각(notes 조회)은 손댈 일감(소식 new/doing/review·문서 있음)만, 나머지는 updated_at."""
     import gitlab_watch
+    info = issue_info() if issue_info else (lambda repo, iid: ("", False))
+    cutoff = datetime.now().astimezone().timestamp() - (config.get("issue_tab.max_age_days") or 60) * 86400
     prio = re.compile(config.get("issue_tab.priority_label") or r"^(?:우선순위|priority)::(.+)$", re.I)
     out = []
     for page in range(1, 6):
         batch = gitlab_watch.api("issues?assignee_username=%s&state=opened&scope=all&per_page=100&page=%d" % (gitlab_watch.ME, page))
         for i in batch:
             ref = i["references"]["full"]
+            repo = ref.split("#")[0].rsplit("/", 1)[-1]
+            state, docs = info(repo, i["iid"])
+            if (datetime.fromisoformat(i["updated_at"].replace("Z", "+00:00")).timestamp() < cutoff
+                    and not docs and state not in ("doing", "review")):
+                continue
             labels = i.get("labels") or []
             p = next((m.group(1) for m in map(prio.match, labels) if m), "")
-            out.append({"title": i["title"], "ref": ref, "url": i["web_url"], "repo": ref.split("#")[0].rsplit("/", 1)[-1],
+            out.append({"title": i["title"], "ref": ref, "url": i["web_url"], "repo": repo,
                         "iid": i["iid"], "priority": p, "labels": [x for x in labels if not prio.match(x)],
                         "due": i.get("due_date") or "", "type": i.get("issue_type") or "issue",
-                        "assigned_at": assigned_at(i), "updated_at": i["updated_at"]})
+                        "assigned_at": assigned_at(i) if docs or state in ("new", "doing", "review") else i["updated_at"],
+                        "updated_at": i["updated_at"]})
         if len(batch) < 100:
             break
     return out
@@ -174,19 +186,25 @@ def next_meetings(n=3):
     return [{k: e.get(k) for k in ("when", "title", "location", "link")} for e in evs[:n]]
 
 
-def collect(prev=None):
+def collect(prev=None, put=None):
+    """칸마다 따로 돌려 끝나는 대로 put(key, 값) 으로 넘긴다(느린 일감 칸이 내 MR·리뷰·회의를 안 막게)."""
     status = {}
     cells = (("mrs", my_mrs, config.on("gitlab")), ("todo", in_progress, bool(config.get("todo.file"))),
              ("meetings", next_meetings, config.on("calendar")),
              ("reviews", review_mrs, config.on("gitlab") and config.on("review_tab")),
              ("issues", my_issues, config.on("gitlab") and config.on("issue_tab")))
-    for key, fn, enabled in cells:
-        if not enabled:  # 꺼진 기능 칸은 아예 안 보낸다
-            continue
+    def one(key, fn):
         try:
             status[key] = {"items": fn(), "at": time.strftime("%H:%M")}
         except Exception as e:  # 칸 하나 실패해도 나머지는 채운다. 이전 값이 있으면 그대로 두고 실패만 표시(GitLab i/o timeout 등)
             old = (prev or {}).get(key) or {}
             status[key] = (dict(old, failed="조회 실패 %s" % time.strftime("%H:%M")) if "items" in old
                            else {"error": "조회 실패: %s" % str(e)[:120], "at": time.strftime("%H:%M")})
+        if put:
+            put(key, status[key])
+
+    with ThreadPoolExecutor(len(cells)) as ex:
+        for key, fn, enabled in cells:
+            if enabled:  # 꺼진 기능 칸은 아예 안 보낸다
+                ex.submit(one, key, fn)
     return status

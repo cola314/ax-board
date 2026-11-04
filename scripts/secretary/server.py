@@ -40,6 +40,7 @@ HTML = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.html"
 # 대화·소식·수신함을 파일에 남긴다(서버 재시작에도 유지). 이 PC 의 artifacts 만, 커밋 안 됨. "모두 지우기"는 hidden 표시.
 CHAT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "artifacts", "secretary", "chat.json")
 BRIEFS = os.path.join(os.path.dirname(CHAT), "briefs")
+STATUS_CACHE = os.path.join(os.path.dirname(CHAT), "status_cache.json")  # 마지막 현황 + 일감 할당 시각 캐시 — 재시작 직후 바로 보여 줌
 
 lock = threading.Lock()
 items, inbox = [], []
@@ -603,15 +604,49 @@ def release_loop():
                 inbox.append({"kind": "digest", "items": shown})
 
 
+def issue_info():
+    """📌 일감 수집용 스냅샷: f(repo, iid) = (그 일감 키 최신 소식 상태, 문서 있음)."""
+    with lock:
+        state = {i["key"]: i.get("state", "new") for i in items if i["kind"] in NEWS_KINDS and i.get("key")}
+    try:
+        files = os.listdir(BRIEFS)
+    except OSError:
+        files = []
+    return lambda repo, iid: (state.get("%s#%s" % (repo, iid), ""), bool(issue_docs(repo, iid, files)))
+
+
+def save_status(status_board):
+    with lock:  # 칸마다 다른 스레드에서 불리므로 쓰기까지 lock 안에서
+        with open(STATUS_CACHE, "w", encoding="utf-8") as f:
+            json.dump({"status": status, "assigned": [[k, *v] for k, v in list(status_board._assigned.items())]}, f, ensure_ascii=False)
+
+
 def status_loop():
-    """현황 칸: 한 바퀴 1분쯤(GitLab·git) 걸려 서버에서 따로 돈다. 감시꾼은 자주 깨고 다시 떠서 거기선 끝까지 못 돈다."""
+    """현황 칸: 한 바퀴 1분쯤(GitLab·git) 걸려 서버에서 따로 돈다. 감시꾼은 자주 깨고 다시 떠서 거기선 끝까지 못 돈다.
+    칸은 끝나는 대로 반영하고 디스크(STATUS_CACHE)에 남겨, 재시작 직후엔 지난 값(각 칸 at 시각 그대로)을 먼저 보여 준다."""
     import status as status_board
+    status_board.issue_info = issue_info
+    try:
+        with open(STATUS_CACHE, encoding="utf-8") as f:
+            saved = json.load(f)
+        with lock:
+            status.update(saved.get("status") or {})
+        status_board._assigned.update({k: (u, a) for k, u, a in saved.get("assigned") or []})
+    except (OSError, ValueError):
+        pass
+
+    def put(key, val):
+        with lock:
+            status[key] = val
+        save_status(status_board)
+
     while True:
         try:
-            b = status_board.collect(status)
+            b = status_board.collect(status, put)
             with lock:
                 status.clear()
                 status.update(b)
+            save_status(status_board)
         except Exception as e:
             print("STATUS_SKIP", e, file=sys.stderr, flush=True)
         status_kick.wait(STATUS_EVERY)

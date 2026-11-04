@@ -31,7 +31,8 @@ DEFAULTS = {
     "flex": {"user_key": ""},
     "attendance": {"week_hours": 40},              # 주 목표 근무시간(근무시간 위젯의 남은 시간·추천 퇴근 계산)
     "review_check": {"times": ["11:30", "17:00"]},
-    "issue_tab": {"priority_label": r"^(?:우선순위|priority)::(.+)$"},  # 📌 일감 탭 우선순위 칩으로 쓸 라벨(그룹 1 = 표시 값)  # 정기 점검 시각(로컬, HH:MM). 늦게 떠도 마지막 +2시간까지는 한 번
+    "issue_tab": {"priority_label": r"^(?:우선순위|priority)::(.+)$",  # 📌 일감 탭 우선순위 칩으로 쓸 라벨(그룹 1 = 표시 값)
+                  "max_age_days": 60},  # 이만큼 갱신 없는 일감은 뺌(소식 doing/review·문서 있는 일감은 남김)  # 정기 점검 시각(로컬, HH:MM). 늦게 떠도 마지막 +2시간까지는 한 번
     # 같은 일감 소식 묶음 키 '프로젝트#번호'. 정규식 그룹 1=프로젝트, 2=번호. 순서대로 먼저 맞는 것
     "news": {"key_patterns": [r"/([\w.-]+)/-/(?:work_items|issues)/(\d+)",   # GitLab 일감 URL
                               r"^(?:Re: )?([\w.-]+) \|.*\(#(\d+)\)"],         # GitLab 알림 메일 "proj | 제목 (#249)"
