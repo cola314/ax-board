@@ -317,8 +317,8 @@ def with_issues(st):
         key, num = "%s#%s" % (m["repo"], m["iid"]), str(m["iid"])
         docs = issue_docs(m["repo"], m["iid"], files)
         decision = next((meta.get("issue-decision") or "결정 필요" for meta in map(brief_meta, docs)
-                         if meta.get("issue-status") == "decision"), "")
-        st_ = "decision" if decision else state.get(key, "")
+                         if meta.get("issue-status") == "decision"), "") if state.get(key) not in ("done", "skip") else ""
+        st_ = "decision" if decision else state.get(key, "")  # 소식이 완료·무시면 문서의 결정 meta 가 남아 있어도 결정 대기로 안 봄
         out.append(dict(m, key=key, state=st_, decision=decision, docs=docs,
                         mgit=mgit_key.get(key) or (mgit_num.get(num) if m["repo"] == DEFAULT_PROJECT else "") or ""))
     out.sort(key=lambda x: x.get("assigned_at") or "", reverse=True)
