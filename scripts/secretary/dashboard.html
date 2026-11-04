@@ -182,8 +182,14 @@ body.f-todo .news.st-done, body.f-todo .news.st-skip { display:none; }
 @container (max-width: 290px) { .fseg .lbl { display:none; } }
 .chatcol { display:flex; flex-direction:column; min-height:0; position:relative; }
 /* 메인 접기: 메인 패널(현황/mgit)·경계선만 숨기고 [소식] + [대화] 로 */
-#chatmax { position:absolute; top:8px; right:12px; z-index:5; background:var(--panel); border:1px solid var(--line); color:var(--mute); border-radius:8px; padding:2px 8px; font:inherit; font-size:12px; cursor:pointer; opacity:.75; user-select:none; }
-#chatmax:hover { opacity:1; color:var(--fg); }
+#chattools { position:absolute; top:8px; right:12px; z-index:5; display:flex; gap:6px; }
+#chattools button { background:var(--panel); border:1px solid var(--line); color:var(--mute); border-radius:8px; padding:2px 8px; font:inherit; font-size:12px; cursor:pointer; opacity:.75; user-select:none; }
+#chattools button:hover { opacity:1; color:var(--fg); }
+/* 🧹 지우기: 기준 id 이하 대화는 화면에서만 숨김 */
+.row.cleared { display:none; }
+.clearbar { align-self:center; margin-top:22px; color:var(--mute); font-size:12px; }
+.clearbar button { background:none; border:0; color:var(--mute); font:inherit; text-decoration:underline; cursor:pointer; padding:0 2px; }
+.clearbar button:hover { color:var(--fg); }
 body.chat-max aside, body.chat-max .split { display:none !important; }
 body.chat-max .wrap { grid-template-columns:1fr !important; grid-template-rows:1fr !important; }
 #backdrop { display:none; }
@@ -354,7 +360,7 @@ form { border-top:0 !important; }
 </aside>
 <div class="split" id="split" title="끌어서 크기 조절 · 두 번 누르면 기본"></div>
 <div class="chatcol">
-<button type="button" id="chatmax" title="메인 패널(현황/mgit) 접기 · Esc 로 복귀">⇤ 메인 접기</button>
+<div id="chattools"><button type="button" id="chatclear" title="지금까지의 대화를 화면에서 숨김(기록·소식판은 그대로)">🧹 지우기</button><button type="button" id="chatmax" title="메인 패널(현황/mgit) 접기 · Esc 로 복귀">⇤ 메인 접기</button></div>
 <main id="list"><div class="empty" id="empty"><big>🔔</big>아직 대화가 없습니다<br>왼쪽 소식·가운데 현황을 보면서 아래에 말을 걸어 주세요</div></main>
 <div class="running" id="running" hidden></div>
 <div class="quick" id="quick"></div>
@@ -768,6 +774,7 @@ async function poll(first) {
       if (it.kind === "user") lastUser = it.id;
       if (it.kind === "mina") lastMina = it.id;
     }
+    if (j.items.length) applyCleared();
     typing(lastUser > lastMina);
     if (stick && j.items.length) { pinned = true; list.scrollTop = list.scrollHeight; }
     if (first) { pins = pins.filter(id => itemsById[id]); savePins(); renderPins(); }  // 서버에서 사라진(숨김) 아이템은 고정에서 뺀다
@@ -1120,6 +1127,28 @@ function chatMax(on) {
 $("chatmax").onclick = () => chatMax(!document.body.classList.contains("chat-max"));
 document.addEventListener("keydown", e => { if (e.key === "Escape" && document.body.classList.contains("chat-max")) chatMax(false); });
 try { if (localStorage.getItem("chatMax")) chatMax(true); } catch {}
+// 🧹 대화 지우기: 화면에서만 숨긴다(chat.json·소식판·미나 수신함은 그대로). 마지막 아이템 id 를 chatClearedAt 에 기억, [보기]로 되돌림
+let clearedAt = 0;
+try { clearedAt = +localStorage.getItem("chatClearedAt") || 0; } catch {}
+function applyCleared() {
+  let n = 0;
+  for (const r of list.querySelectorAll(".row[id^='it']")) { const old = +r.id.slice(2) <= clearedAt; r.classList.toggle("cleared", old); if (old) n++; }
+  let bar = $("clearbar");
+  if (!n) { bar?.remove(); return; }
+  if (!bar) {
+    bar = document.createElement("div"); bar.id = "clearbar"; bar.className = "clearbar";
+    const b = document.createElement("button"); b.type = "button"; b.textContent = "보기";
+    b.onclick = () => { clearedAt = 0; try { localStorage.removeItem("chatClearedAt"); } catch {} applyCleared(); };
+    bar.append(document.createElement("span"), " · ", b);
+  }
+  bar.firstChild.textContent = `이전 대화 ${n}개 숨김`;
+  if (list.firstChild !== bar) list.prepend(bar);
+}
+$("chatclear").onclick = () => {
+  if (!last || !confirm("지금까지의 대화를 화면에서 지울까요? (기록은 남고 [보기]로 되돌릴 수 있어요)")) return;
+  clearedAt = last; try { localStorage.setItem("chatClearedAt", String(last)); } catch {}
+  applyCleared();
+};
 // ── 📜 규칙 보기 ──────────────────────────────────────────────
 // 도식은 위 #rules 마크업에 하드코딩. rules.file(mina-secretary.md)의 흐름 규칙이 바뀌면 같이 고칠 것. 원문은 펼칠 때 읽는다.
 let rulesLoaded = 0;
