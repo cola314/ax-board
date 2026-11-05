@@ -25,7 +25,7 @@ def recent(items, minutes, now):
 
 
 def stats(items):
-    c = {"mail": 0, "gitlab_mail": 0, "gitlab": 0, "dm": 0, "group": 0}
+    c = {"mail": 0, "gitlab_mail": 0, "gitlab": 0, "dm": 0, "dm_talk": 0, "group": 0}
     for it in items:
         if it.get("kind") != "teams":
             continue
@@ -34,8 +34,8 @@ def stats(items):
             c["gitlab_mail" if GITLAB_MAIL.match(it.get("text") or "") else "mail"] += 1
         elif frm.startswith("🦊"):
             c["gitlab"] += 1
-        elif chat == frm:  # 1:1 방은 방 이름이 상대 이름
-            c["dm"] += 1
+        elif chat == frm:  # 1:1 방은 방 이름이 상대 이름. 내가 직접 대화 중이라 무시(skip)된 건 따로
+            c["dm_talk" if it.get("state") == "skip" else "dm"] += 1
         else:
             c["group"] += 1
     return c
@@ -47,4 +47,4 @@ if __name__ == "__main__":
     with open(CHAT, encoding="utf-8") as f:
         items = json.load(f).get("items", [])
     c = stats(recent(items, minutes, datetime.now()))
-    print("메일 %(mail)d · GitLab %(gitlab)d(알림 메일 %(gitlab_mail)d 제외) · Teams 1:1 %(dm)d · 그룹방 %(group)d" % c)
+    print("메일 %(mail)d · GitLab %(gitlab)d(알림 메일 %(gitlab_mail)d 제외) · Teams 1:1 %(dm)d(직접 대화 %(dm_talk)d 제외) · 그룹방 %(group)d" % c)
