@@ -15,7 +15,9 @@
   POST /api/notify        다른 세션의 보고 {from, text} → 카드 + 미나 수신함
   POST /api/task          {id, title} 진행 중 등록 / {id, progress, note, eta_min?} 진행률 / {id, failed:true, note} 실패 / {id, done:true} 완료
   POST /api/status        현황 칸 데이터(서버가 5분마다 직접 모음, 수동 갱신용)
-  POST /api/view          {mgit: url} → 대시보드 mgit 탭
+  POST /api/view          {mgit: url} → 대시보드 mgit 탭 / {editor: 파일 경로} → ✏ 에디터 탭에 그 파일
+  GET  /api/editor        ✏ 에디터 탭용 웹 VS Code 토큰 주소(features.editor, 로컬 Host 만)
+  *    /code/...          웹 VS Code(code serve-web, editor.port) 중계 — 같은 출처라야 iframe 에 끼워진다
   POST /api/news/hide     {id} 소식 하나 지우기(숨김)
   POST /api/news/clear    받은 소식(Teams 카드) 모두 숨기기
   POST /api/news/state    {id|key|chat|before, state} 소식 상태(new/doing/review/done/skip). key 면 같은 일감, chat 이면 같은 대화방 새 소식 전부
@@ -23,6 +25,8 @@
 import json
 import os
 import re
+import secrets
+import socket
 import subprocess
 import sys
 import threading
@@ -44,7 +48,7 @@ STATUS_CACHE = os.path.join(os.path.dirname(CHAT), "status_cache.json")  # 마�
 
 lock = threading.Lock()
 items, inbox = [], []
-view = {"mgit": ""}  # 대시보드 mgit 탭에 띄울 주소
+view = {"mgit": "", "editor": {}}  # 대시보드 mgit 탭에 띄울 주소, ✏ 에디터 탭에 열 파일 {file, at}
 tasks = {}  # 미나가 뒤에서 돌리는 일 {id: {title, started, progress?, note?}} — 대시보드 "진행 중" 표시
 status = {}  # 대시보드 '현황' 칸(status_loop 가 5분마다 채움)
 STATUS_EVERY = 300
@@ -344,6 +348,47 @@ def brief_meta(name):
         return {}
 
 
+# ── ✏ 에디터 탭: 웹 VS Code(code serve-web) ── 127.0.0.1:editor.port 에 /code 경로로 띄우고 이 서버가 /code/... 를 중계한다.
+# serve-web 은 X-Frame-Options SAMEORIGIN·frame-ancestors 'self' 라 다른 포트(다른 출처)에선 iframe 이 막힌다.
+EDITOR_TOKEN = os.path.join(os.path.dirname(CHAT), "editor_token")  # 연결 토큰(처음에 만듦, 커밋 안 됨)
+
+
+def editor_start():
+    """웹 VS Code 를 띄운다. 그 포트에 이미 떠 있으면(서버만 재시작 등) 그대로 쓴다. 첫 실행엔 MS 서버에서 웹 서버 파일을 받는다."""
+    port = int(config.get("editor.port"))
+    if not os.path.exists(EDITOR_TOKEN):
+        os.makedirs(os.path.dirname(EDITOR_TOKEN), exist_ok=True)
+        with open(EDITOR_TOKEN, "w") as f:
+            f.write(secrets.token_urlsafe(24))
+    # 기본 설정(다크 테마 등)은 serve-web 의 Machine 설정(~/.vscode-server/data/Machine/settings.json)에 없는 키만 넣는다.
+    # 데스크톱 VS Code 설정(%APPDATA%\Code\User)과 별개. 브라우저 쪽 사용자 설정에서 바꾸면 그게 우선
+    machine = os.path.join(os.path.expanduser("~"), ".vscode-server", "data", "Machine", "settings.json")
+    try:
+        with open(machine, encoding="utf-8") as f:
+            cur = json.load(f)
+    except OSError:
+        cur = {}
+    except ValueError:  # 주석 등으로 못 읽으면 손대지 않는다
+        cur = None
+    if cur is not None and any(k not in cur for k in config.get("editor.settings") or {}):
+        os.makedirs(os.path.dirname(machine), exist_ok=True)
+        with open(machine, "w", encoding="utf-8") as f:
+            json.dump(dict(config.get("editor.settings"), **cur), f, ensure_ascii=False, indent=2)
+    with socket.socket() as s:
+        if s.connect_ex(("127.0.0.1", port)) == 0:
+            return
+    # bin/code 는 Code.exe → code-tunnel.exe 를 거치므로 code-tunnel.exe 를 바로. 출력엔 토큰 주소가 찍혀 버린다
+    subprocess.Popen([os.path.expandvars(config.get("editor.cli")), "serve-web", "--host", "127.0.0.1", "--port", str(port),
+                      "--server-base-path", "/code", "--connection-token-file", EDITOR_TOKEN, "--accept-server-license-terms",
+                      "--disable-telemetry", "--default-folder", config.path(config.get("editor.folder") or ".")],
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=0x08000000)
+
+
+def local_host(h):
+    """Host 헤더가 이 PC 인가(DNS 리바인딩으로 남의 페이지가 토큰을 읽지 못하게)."""
+    return (h.headers.get("Host") or "").rsplit(":", 1)[0] in ("localhost", "127.0.0.1")
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -363,13 +408,63 @@ class H(BaseHTTPRequestHandler):
         except ValueError:
             return {}
 
+    def is_code(self):
+        return config.on("editor") and re.match(r"/code(/|\?|$)", self.path) and local_host(self)
+
+    def proxy(self):
+        """/code/... 를 웹 VS Code 로 그대로 넘기고 응답 바이트를 그대로 돌려준다(Host 도 그대로 — 웹 VS Code 가 접속 주소로 씀).
+        WebSocket(Upgrade)은 101 뒤로 양방향 파이프, 그 밖은 Connection: close 로 받아 끝까지 흘린다."""
+        try:
+            up = socket.create_connection(("127.0.0.1", int(config.get("editor.port"))), timeout=10)
+        except OSError:
+            return self.send(502, {"error": "editor not running"})
+        ws = "upgrade" in (self.headers.get("Connection") or "").lower()
+        hdr = [(k, v) for k, v in self.headers.items() if ws or k.lower() not in ("connection", "keep-alive")]
+        head = "%s %s HTTP/1.1\r\n%s%s\r\n" % (self.command, self.path, "".join("%s: %s\r\n" % kv for kv in hdr),
+                                               "" if ws else "Connection: close\r\n")
+        up.sendall(head.encode("latin-1") + self.rfile.read(int(self.headers.get("Content-Length") or 0)))
+        up.settimeout(None)
+        self.close_connection = True
+        if ws:
+            def pump():
+                try:
+                    while True:
+                        b = self.rfile.read1(65536)
+                        if not b:
+                            break
+                        up.sendall(b)
+                except OSError:
+                    pass
+                try:
+                    up.shutdown(socket.SHUT_WR)
+                except OSError:
+                    pass
+            threading.Thread(target=pump, daemon=True).start()
+        try:
+            while True:
+                b = up.recv(65536)
+                if not b:
+                    break
+                self.connection.sendall(b)
+        except OSError:
+            pass
+        finally:
+            up.close()
+
     def do_GET(self):
+        if self.is_code():
+            return self.proxy()
         u = urlparse(self.path)
         if u.path == "/":
             with open(HTML, "rb") as f:
                 return self.send(200, f.read(), "text/html; charset=utf-8")
         if u.path == "/api/config":  # 화면용 공개 값만(비서·사용자 이름, 축약 규칙, 단축 버튼)
             return self.send(200, dict(config.get("dashboard") or {}, user=config.me_name()))
+        if u.path == "/api/editor":  # ✏ 에디터 탭: ?tkn= 주소(한 번 열면 vscode-tkn 쿠키) + 기본 폴더
+            if not config.on("editor") or not local_host(self):
+                return self.send(404, {"error": "editor off"})
+            with open(EDITOR_TOKEN, encoding="utf-8") as f:
+                return self.send(200, {"url": "/code/?tkn=" + f.read().strip(), "folder": config.path(config.get("editor.folder") or ".")})
         if u.path == "/api/rules":  # 대시보드 '📜 규칙' 보기: 운영 규칙 마크다운 원문
             rel = config.get("rules.file") or ""
             if not rel:
@@ -394,12 +489,14 @@ class H(BaseHTTPRequestHandler):
             with lock:
                 return self.send(200, {"items": [i for i in items[after:] if not i.get("hidden")], "pending": len(inbox),
                                        "listen_age": round(time.time() - heartbeat[0]) if heartbeat[0] else None,
-                                       "mgit": view["mgit"], "tasks": list(tasks.values()), "status": with_issues(with_briefs(status)), "held": len(held),
+                                       "mgit": view["mgit"], "editor": view["editor"], "tasks": list(tasks.values()), "status": with_issues(with_briefs(status)), "held": len(held),
                                        "attendance": attendance_cached(),
                                        "states": {i["id"]: i.get("state", "new") for i in items if i["kind"] in NEWS_KINDS and not i.get("hidden")}})
         self.send(404, {"error": "not found"})
 
     def do_POST(self):
+        if self.is_code():
+            return self.proxy()
         b = self.body()
         if self.path == "/api/items":
             if not str(b.get("text") or "").strip():
@@ -481,8 +578,11 @@ class H(BaseHTTPRequestHandler):
                 return self.send(400, {"error": "gitlab url only"})
             subprocess.Popen([config.get("gmail.chrome_path") or "chrome", url], creationflags=0x08000000)
             return self.send(200, {"ok": True})
-        if self.path == "/api/view":  # 미나가 mgit 주소를 넘기면 대시보드가 mgit 탭으로 전환
-            view["mgit"] = str(b.get("mgit") or "")
+        if self.path == "/api/view":  # 미나가 mgit 주소를 넘기면 대시보드가 mgit 탭으로 전환, editor(파일 경로, 상대면 레포 기준)면 ✏ 에디터 탭에서 연다
+            if b.get("editor"):
+                view["editor"] = {"file": config.path(str(b["editor"])), "at": time.time()}
+            else:
+                view["mgit"] = str(b.get("mgit") or "")
             return self.send(200, view)
         if self.path == "/api/news/state":
             state = str(b.get("state") or "")
@@ -658,5 +758,10 @@ if __name__ == "__main__":
     if config.on("status"):
         threading.Thread(target=status_loop, daemon=True).start()
     threading.Thread(target=release_loop, daemon=True).start()
+    if config.on("editor"):
+        try:
+            editor_start()
+        except OSError as e:  # VS Code 가 없거나 경로가 틀려도 대시보드는 뜬다(에디터 탭만 502)
+            print("EDITOR_SKIP", e, file=sys.stderr, flush=True)
     print("secretary on http://127.0.0.1:%d" % PORT, flush=True)
     ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()

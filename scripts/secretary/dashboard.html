@@ -104,7 +104,7 @@ aside { container-type:inline-size; }
 .mgitview { flex:1; border:0; width:100%; min-height:0; background:#fff; }
 #doc { background:transparent; }  /* 문서 바깥 스크롤바 트랙이 iframe 배경(흰색)을 비춰 다크에서 흰 띠로 보이던 것 */
 /* 메인 패널 뷰 전환: 현황 / mgit (소식은 왼쪽 사이드바) */
-body:not(.view-status) #board, body:not(.view-reviews) #reviews, body:not(.view-issues) #issues, body:not(.view-mgit) #mgit, body:not(.view-doc) #doc, body:not(.view-rules) #rules { display:none !important; }
+body:not(.view-status) #board, body:not(.view-reviews) #reviews, body:not(.view-issues) #issues, body:not(.view-mgit) #mgit, body:not(.view-doc) #doc, body:not(.view-editor) #editor, body:not(.view-rules) #rules { display:none !important; }
 /* 📜 규칙 보기: 단순 도식 4장(소식 길+표시 등급·일감 흐름·평소 습관·승인 필요) + 원문은 접어서. 좁으면 세로로 접힘 */
 #rules { flex:1; overflow-y:auto; min-height:0; padding:10px; display:flex; flex-direction:column; gap:10px; container-type:inline-size; }
 .fig { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
@@ -357,6 +357,7 @@ form { border-top:0 !important; }
       <button type="button" class="pbtn" data-v="issues" id="issbtn" hidden title="나에게 할당된 열린 일감 · 숫자 = 결정 대기 + 리뷰 대기">📌<span class="lbl"> 일감</span> <span id="issn"></span></button>
       <button type="button" class="pbtn" data-v="mgit" id="mgitbtn" hidden title="mgit">🔍<span class="lbl"> mgit</span></button>
       <button type="button" class="pbtn" data-v="doc" id="docbtn" hidden title="문서(변경 설명·준비자료)">📄<span class="lbl"> 문서</span></button>
+      <button type="button" class="pbtn" data-v="editor" id="editorbtn" hidden title="웹 VS Code(처음 열 때 불러옴)">✏<span class="lbl"> 에디터</span></button>
       <button type="button" class="pbtn" data-v="rules" title="규칙">📜<span class="lbl"> 규칙</span></button>
     </span>
   </h2>
@@ -397,6 +398,7 @@ form { border-top:0 !important; }
   </div>
   <iframe id="mgit" class="mgitview" hidden title="mgit"></iframe>
   <iframe id="doc" class="mgitview" hidden title="문서"></iframe>
+  <iframe id="editor" class="mgitview" hidden title="에디터"></iframe>
 </aside>
 <div class="split" id="split" title="끌어서 크기 조절 · 두 번 누르면 기본"></div>
 <div class="chatcol">
@@ -822,6 +824,8 @@ async function poll(first) {
     // 서버가 새 mgit 주소를 줄 때만 연다. 첫 로드엔 브라우저에 기억된 주소가 우선
     // 정시 묶음·1:1 보류 중인 소식 수(아직 소식판에 안 올라온 것) — 사이드바 제목에 툴팁으로만
     $("sidetoggle").title = "눌러서 접기/펴기" + (j.held ? ` · 다음 정시에 올라올 소식 ${j.held}건` : "");
+    if (j.editor?.at && j.editor.at !== serverEditor) { if (serverEditor !== null) openEditor(j.editor.file, true); serverEditor = j.editor.at; }  // 미나가 /api/view {editor} 로 연 파일(첫 로드엔 안 엶)
+    else if (serverEditor === null) serverEditor = 0;
     if (j.mgit && j.mgit !== serverMgit) { const fresh = !first || !mgitUrl; serverMgit = j.mgit; if (fresh) openMgit(j.mgit, !first); }
     renderTasks(j.tasks || []);
     if (JSON.stringify(j.attendance || null) !== lastAtt) { lastAtt = JSON.stringify(j.attendance || null); renderAtt(j.attendance); }
@@ -863,12 +867,14 @@ ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height =
 let mgitUrl = "", lastStatus = "";
 // 메인 패널 뷰: status(현황) / mgit
 function setView(v) {
-  if (v !== "mgit" && v !== "doc" && v !== "rules" && v !== "reviews" && v !== "issues") v = "status";
-  for (const x of ["status", "reviews", "issues", "mgit", "doc", "rules"]) document.body.classList.toggle("view-" + x, x === v);
+  if (v !== "mgit" && v !== "doc" && v !== "editor" && v !== "rules" && v !== "reviews" && v !== "issues") v = "status";
+  for (const x of ["status", "reviews", "issues", "mgit", "doc", "editor", "rules"]) document.body.classList.toggle("view-" + x, x === v);
   if (v === "rules") loadRules();
   for (const b of $("seg").children) b.classList.toggle("on", b.dataset.v === v);
   $("mgit").hidden = v !== "mgit";
   $("doc").hidden = v !== "doc";
+  $("editor").hidden = v !== "editor";
+  if (v === "editor" && !$("editor").src) openEditor();
   try { localStorage.setItem("view", v); } catch {}
 }
 // 마지막으로 연 mgit 주소는 브라우저에 기억(새로고침·서버 재시작에도 유지)
@@ -892,6 +898,22 @@ function openDoc(url, show) {
   try { localStorage.setItem("docUrl", url); } catch {}
   if (show) setView("doc");
 }
+// ✏ 에디터 탭: 웹 VS Code(서버가 /code 로 중계하는 code serve-web, features.editor). 탭을 처음 열 때 불러오고,
+// 파일은 payload openFile 로 다시 불러와 연다(열려 있던 편집기는 VS Code 가 복원). 토큰은 ?tkn= 을 한 번 받아 쿠키로
+let editor = null, serverEditor = null;
+async function openEditor(file, show) {
+  if (!editor) {
+    try { const r = await fetch("/api/editor", { cache: "no-store" }); if (!r.ok) throw 0; editor = await r.json(); }
+    catch { if (document.body.classList.contains("view-editor")) setView("status"); return; }
+    await fetch(editor.url, { redirect: "manual" }).catch(() => {});  // ?tkn= 은 302 로 쿼리를 버리므로 쿠키만 먼저 받는다
+  }
+  const p = s => "/" + s.replace(/\\/g, "/");  // C:\a\b → /C:/a/b (vscode-remote 경로)
+  let src = "/code/?folder=" + encodeURIComponent(p(editor.folder));
+  if (file) src += "&payload=" + encodeURIComponent(JSON.stringify([["openFile", "vscode-remote://" + location.host + p(file)]]));
+  if (file || !$("editor").src) $("editor").src = src;
+  if (show) setView("editor");
+}
+fetch("/api/editor", { cache: "no-store" }).then(r => { $("editorbtn").hidden = !r.ok; }).catch(() => {});
 $("tbadge").onclick = e => { e.stopPropagation(); const p = $("taskpop"); p.hidden = !p.hidden; renderTaskCard(); };
 $("seg").onclick = e => { const v = e.target.closest("button")?.dataset.v; if (v) setView(v); };
 // 뒤에서 도는 일: 평소엔 입력창 옆 ⏳N 배지만. 누르면 팝오버에 이름 목록, 줄을 누르면 진행률·경과·남은 시간.
@@ -1231,7 +1253,7 @@ try {
   const d = localStorage.getItem("docUrl");
   if (d) openDoc(d, false);
   const sv = localStorage.getItem("view");
-  setView(sv === "rules" || sv === "reviews" || sv === "issues" ? sv : sv === "mgit" && !$("mgitbtn").hidden ? "mgit" : sv === "doc" && !$("docbtn").hidden ? "doc" : "status");
+  setView(sv === "rules" || sv === "reviews" || sv === "issues" || sv === "editor" ? sv : sv === "mgit" && !$("mgitbtn").hidden ? "mgit" : sv === "doc" && !$("docbtn").hidden ? "doc" : "status");
 } catch { setView("status"); }
 try { if (localStorage.getItem("rail")) rail(true); } catch {}
 $("readall").onclick = () => {

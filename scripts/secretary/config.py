@@ -22,7 +22,8 @@ DEFAULTS = {
                  "review_check": True,                     # 정기 점검(근무일 review_check.times 에 미나를 깨움)
                  "attendance": True,                       # 현황판 맨 위 근무시간 한 줄(attendance.json 이 있을 때만)
                  "review_tab": True,                       # 메인 패널 👀 리뷰 탭(나에게 리뷰 요청 온 열린 MR, gitlab 켜졌을 때만)
-                 "issue_tab": True},                       # 메인 패널 📌 일감 탭(나에게 할당된 열린 일감, gitlab 켜졌을 때만)
+                 "issue_tab": True,                        # 메인 패널 📌 일감 탭(나에게 할당된 열린 일감, gitlab 켜졌을 때만)
+                 "editor": False},                         # 메인 패널 ✏ 에디터 탭(웹 VS Code, code serve-web)
     "gitlab": {"host": "gitlab.com", "username": "", "cli": "glab", "branch_prefix": ""},
     "gmail": {"window_title_regex": "", "chrome_path": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
               "chrome_profile": "Default", "url": "https://mail.google.com/mail/u/0/#inbox"},
@@ -31,6 +32,14 @@ DEFAULTS = {
     "flex": {"user_key": ""},
     "attendance": {"week_hours": 40},              # 주 목표 근무시간(근무시간 위젯의 남은 시간·추천 퇴근 계산)
     "review_check": {"times": ["11:30", "17:00"]},
+    # ✏ 에디터 탭: serve-web 포트(127.0.0.1 전용, 서버가 /code 로 중계)·VS Code CLI(code-tunnel.exe)·기본 폴더(ROOT 기준, 비우면 ROOT)
+    # settings: serve-web Machine 설정에 없으면 넣을 기본값(데스크톱 VS Code 설정과 별개)
+    "editor": {"port": 8792, "cli": r"%LOCALAPPDATA%\Programs\Microsoft VS Code\bin\code-tunnel.exe", "folder": "",
+               "settings": {"workbench.colorTheme": "Dark Modern",  # 한글이 '모호한 유니코드'로 상자 표시되던 것 끔
+                            "editor.unicodeHighlight.ambiguousCharacters": False, "editor.unicodeHighlight.nonBasicASCII": False,
+                            # 끼워 쓰는 창이라 방해 팝업 끔: 작업 실행 전 저장 질문, 설문(Copilot PMF 등)·실험 알림. 저장은 자동
+                            "task.saveBeforeRun": "never", "files.autoSave": "afterDelay",
+                            "telemetry.feedback.enabled": False, "workbench.enableExperiments": False}},
     "issue_tab": {"priority_label": r"^(?:우선순위|priority)::(.+)$",  # 📌 일감 탭 우선순위 칩으로 쓸 라벨(그룹 1 = 표시 값)
                   "max_age_days": 60},  # 이만큼 갱신 없는 일감은 뺌(소식 doing/review·문서 있는 일감은 남김)  # 정기 점검 시각(로컬, HH:MM). 늦게 떠도 마지막 +2시간까지는 한 번
     # 같은 일감 소식 묶음 키 '프로젝트#번호'. 정규식 그룹 1=프로젝트, 2=번호. 순서대로 먼저 맞는 것
