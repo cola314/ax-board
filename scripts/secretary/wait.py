@@ -28,6 +28,7 @@ BASE = config.base()
 WAKE_NAMES = config.wake_names()
 GROUP_QUIET, GROUP_MAX = 30, 120  # 그룹방: 30초 조용하면, 아무리 길어도 2분이면 깨움
 DM_QUIET, DM_MAX = 10, 60
+HOURLY = bool(config.get("wake.hourly"))  # 정각 문서 모드: 그룹방·GitLab·메일은 깨우지 않고 정시 묶음(digest)으로만
 TALKING = 600  # 내가 이 시간(초) 안에 답한 1:1 은 직접 대화 중으로 보고 깨우지 않음  # 1:1: 짧게 끊어 치는 걸 한 번에(10초 조용하면, 길어도 1분)
 STATE = config.state_file()
 
@@ -184,7 +185,7 @@ def main():
                     dm_first = dm_first if dm else now
                     dm_last = now
                     dm.append(dict(m, source="teams"))
-                else:
+                elif not HOURLY:
                     now = time.time()
                     first_at = first_at if group else now
                     last_at = now
@@ -220,7 +221,8 @@ def main():
         while not gitlab_q.empty():
             g = gitlab_q.get()
             api("/api/items", {"kind": "teams", "from": "🦊 " + g["from"], "chat": g["chat"], "text": g["text"], "tier": gitlab_tier(g)})
-            out.append(dict(g, source="gitlab"))
+            if not HOURLY:
+                out.append(dict(g, source="gitlab"))
             save_state(st)
         if gmail and time.time() - gmail_checked > 60:
             gmail_checked = time.time()
@@ -245,7 +247,7 @@ def main():
                 # 메일은 바로 깨운다. 단 GitLab 알림 메일("Re: <프로젝트> | 제목")은 To-Do 로 같은 소식이 오니 소식판에만
                 api("/api/items", {"kind": "teams", "from": "✉️ " + m["from"], "chat": "메일", "text": m["text"],
                                    "tier": "none" if GITLAB_MAIL.match(m["text"]) else "hour"})
-                if not GITLAB_MAIL.match(m["text"]):
+                if not GITLAB_MAIL.match(m["text"]) and not HOURLY:
                     out.append(dict(m, source="mail"))
             save_state(st)
         now = time.time()
