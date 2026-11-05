@@ -16,6 +16,10 @@ BASE = config.base()
 if __name__ == "__main__":
     sys.stdin.reconfigure(encoding="utf-8")
     args = sys.argv[1:]
+    if args[:1] in (["--help"], ["-h"]):  # 사용법 확인용 호출이 대시보드에 '--help' 로 올라가던 것 방지
+        sys.stdout.reconfigure(encoding="utf-8")
+        print(__doc__)
+        sys.exit(0)
     body = {"kind": "mina"}
     while args[:1] in (["--mgit"], ["--doc"]):
         body[args[0][2:]], args = args[1], args[2:]
